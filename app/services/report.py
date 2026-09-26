@@ -1,0 +1,54 @@
+"""Final interview report: numbers from the session, words from the interview agent."""
+from __future__ import annotations
+
+from app.services.agent import agent
+from app.services.conversation import verdicts
+
+
+def _cache_key(session) -> str:
+    dsa_done = bool(session.dsa and session.dsa.get("submitted"))
+    return f"{len(session.answers)}|{dsa_done}|{sorted(session.round_scores.items())}"
+
+
+def _overall_score(session) -> int:
+    if session.round_scores:
+        return round(sum(session.round_scores.values()) / len(session.round_scores))
+    scores = [a["feedback"]["score"] for a in session.answers]
+    return round(sum(scores) / len(scores)) if scores else 0
+
+
+def _written_feedback(session) -> dict:
+    if not session.answers and not (session.dsa and session.dsa.get("evaluation")):
+        return {
+            "summary": "No round has been completed yet, so there is nothing to assess.",
+            "communication_assessment": {},
+            "next_steps": ["Complete at least one round to get feedback."],
+        }
+    key = _cache_key(session)
+    cached = session.report_cache
+    if cached and cached.get("key") == key:
+        return cached["feedback"]
+    feedback = agent.final_report(session.profile, session.answers, session.round_scores, session.dsa)
+    session.report_cache = {"key": key, "feedback": feedback}
+    return feedback
+
+
+def build_report(session) -> dict:
+    by_section: dict[str, list[dict]] = {}
+    for answer in session.answers:
+        by_section.setdefault(answer.get("section", "general"), []).append(answer)
+    section_summaries = {
+        section: {"answer_count": len(items), "average_score": round(sum(i["feedback"]["score"] for i in items) / len(items)), "answers": items}
+        for section, items in by_section.items()
+    }
+    return {
+        "overall_score": _overall_score(session),
+        **_written_feedback(session),
+        "section_summaries": section_summaries,
+        "integrity_observations": session.proctor_events,
+        "warnings": session.warnings,
+        "disqualified": session.disqualified,
+        "round_scores": session.round_scores,
+        "round_verdicts": verdicts(session),
+        "dsa_result": session.dsa,
+    }

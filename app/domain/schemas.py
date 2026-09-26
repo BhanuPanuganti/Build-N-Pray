@@ -1,4 +1,6 @@
 from enum import Enum
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -37,13 +39,25 @@ class SectionStartRequest(BaseModel):
 
 
 class DSAStartRequest(BaseModel):
-    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
-    duration_minutes: int = Field(default=20, ge=5, le=90)
+    """Omitted fields fall back to the session profile."""
+    difficulty: str | None = Field(default=None, pattern="^(easy|medium|hard)$")
+    duration_minutes: int | None = Field(default=None, ge=5, le=90)
 
 
 class DSAAnswerRequest(BaseModel):
-    code: str = Field(min_length=1, max_length=20000)
-    language: str = Field(default="python", pattern="^(python|javascript|java)$")
+    code: str = Field(min_length=1, max_length=50000)
+    language: str = Field(default="python", max_length=20)
+
+
+class RunCodeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=50000)
+    language: str = Field(max_length=20)
+    custom_input: str | None = Field(default=None, max_length=200000)
+
+
+class SubmitCodeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=50000)
+    language: str = Field(max_length=20)
 
 
 class ProctorEventRequest(BaseModel):
@@ -65,8 +79,26 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=8, max_length=128)
+    role: Literal["candidate", "admin"] = "candidate"
+    admin_access_code: str = ""
 
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class CreateInterviewRequest(BaseModel):
+    role: str = Field(min_length=2, max_length=200)
+    job_description: str = Field(min_length=30, max_length=8000)
+    interview_focus: str = Field(min_length=5, max_length=1000)
+    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
+    dsa_enabled: bool = True
+    dsa_duration_minutes: int = Field(default=20, ge=5, le=90)
+    project_question_count: int = Field(default=3, ge=3, le=5)
+    fundamentals_question_count: int = Field(default=3, ge=3, le=5)
+
+
+class JoinInterviewRequest(BaseModel):
+    resume: str = Field(min_length=10, max_length=8000)
+    preparation_goal: str = Field(min_length=5, max_length=1000)

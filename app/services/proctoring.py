@@ -47,6 +47,17 @@ def record_observation(session, event_type: str, details: str) -> dict:
     return add_warning(session, event_type, details)
 
 
+def rising_edge(session, key: str, active: bool) -> bool:
+    """True only on the transition into an active episode.
+
+    A face that stays missing, or a gaze that stays off-screen, must not add a
+    new warning on every camera poll.
+    """
+    previous = session.vision_latches.get(key, False)
+    session.vision_latches[key] = active
+    return active and not previous
+
+
 def analyse_image(image_bytes: bytes) -> VisionAnalysis:
     """Optional MediaPipe face count, falling back safely to a lighting check."""
     try:

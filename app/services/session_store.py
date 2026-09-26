@@ -2,6 +2,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from uuid import uuid4
 
+SECTIONS = ("dsa", "project", "fundamentals")
+
+
+def _default_sections() -> dict[str, str]:
+    return {name: "not_started" for name in SECTIONS}
+
 
 @dataclass
 class Session:
@@ -14,8 +20,14 @@ class Session:
     dsa: dict | None = None
     warnings: int = 0
     disqualified: bool = False
+    vision_latches: dict[str, bool] = field(default_factory=dict)
     round_index: int = 0
     round_scores: dict = field(default_factory=dict)
+    sections: dict[str, str] = field(default_factory=_default_sections)
+    active_section: str | None = None
+    conversation: dict[str, dict] = field(default_factory=dict)
+    report_cache: dict | None = None
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class SessionStore:
@@ -24,6 +36,8 @@ class SessionStore:
 
     def create(self, profile: dict, questions: list[str]) -> Session:
         session = Session(str(uuid4()), profile, questions)
+        if not profile.get("dsa_enabled", True):
+            session.sections["dsa"] = "skipped"
         self.sessions[session.id] = session
         return session
 
