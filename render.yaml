@@ -6,9 +6,7 @@ services:
     name: bnb-backend
     env: docker
     dockerfilePath: ./Dockerfile
-    # The starter plan ($7/mo) provides enough RAM for a small deployment. 
-    # Can be downgraded to 'free' for testing, but WebSockets might sleep.
-    plan: starter 
+    plan: free
     envVars:
       - key: PORT
         value: 8000
@@ -41,7 +39,7 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm start
-    plan: starter
+    plan: free
     envVars:
       # Automatically connects the frontend to your deployed backend URL
       - key: NEXT_PUBLIC_API_URL
