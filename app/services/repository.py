@@ -10,6 +10,7 @@ from pymongo import MongoClient
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+MAX_TOKENS = 10
 
 
 def password_hash(password: str, salt: bytes | None = None) -> str:
@@ -58,12 +59,14 @@ class Repository:
         return {"name": user["name"], "email": user["email"], "role": user.get("role") or "candidate", "token": token}
 
     def _issue_token(self, email: str) -> str:
+        """Add a sign-in token. Earlier ones stay valid, so a second device does not sign out the first."""
         token = secrets.token_urlsafe(32)
         digest = hashlib.sha256(token.encode()).hexdigest()
         if self.db is not None:
-            self.db.users.update_one({"email": email}, {"$set": {"token_hash": digest}})
+            self.db.users.update_one({"email": email}, {"$push": {"token_hashes": {"$each": [digest], "$slice": -MAX_TOKENS}}})
         else:
-            self.memory_users[email]["token_hash"] = digest
+            user = self.memory_users[email]
+            user["token_hashes"] = (user.get("token_hashes", []) + [digest])[-MAX_TOKENS:]
         return token
 
     def create_user(self, name: str, email: str, password: str, role: str = "candidate") -> dict:
@@ -96,9 +99,10 @@ class Repository:
     def user_from_token(self, token: str) -> dict | None:
         digest = hashlib.sha256(token.encode()).hexdigest()
         if self.db is not None:
-            user = self.db.users.find_one({"token_hash": digest})
+            # token_hash is the single-token field older accounts still carry.
+            user = self.db.users.find_one({"$or": [{"token_hashes": digest}, {"token_hash": digest}]})
         else:
-            user = next((item for item in self.memory_users.values() if item.get("token_hash") == digest), None)
+            user = next((item for item in self.memory_users.values() if digest in item.get("token_hashes", [])), None)
         if not user:
             return None
         return {"name": user["name"], "email": user["email"], "role": user.get("role") or "candidate"}
@@ -120,6 +124,7 @@ class Repository:
             "sections": session.sections,
             "active_section": session.active_section,
             "conversation": session.conversation,
+            "report_cache": session.report_cache,
             "created_at": session.created_at,
         }
         if self.db is not None:
@@ -166,6 +171,15 @@ class Repository:
         if self.db is not None:
             return [self._strip(item) for item in self.db.sessions.find({"profile.interview_id": interview_id})]
         return [item for item in self.memory_sessions.values() if (item.get("profile") or {}).get("interview_id") == interview_id]
+
+    def attempt_for(self, interview_id: str, email: str) -> dict | None:
+        """The candidate's earlier attempt at this interview, if any."""
+        if self.db is not None:
+            return self._strip(self.db.sessions.find_one({"profile.interview_id": interview_id, "profile.candidate_email": email}))
+        return next(
+            (item for item in self.sessions_for_interview(interview_id) if (item.get("profile") or {}).get("candidate_email") == email),
+            None,
+        )
 
     def count_attempts(self, interview_id: str) -> int:
         return len(self.sessions_for_interview(interview_id))

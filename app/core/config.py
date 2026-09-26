@@ -30,7 +30,24 @@ class Settings(BaseSettings):
     code_max_output_chars: int = 64_000
     code_parallel_tests: int = 4
     frontend_url: str = "http://localhost:3000"
+    # Comma-separated extra browser origins, such as a Vercel preview URL.
+    cors_origins: str = ""
+    # Optional. Example: https://.*\.vercel\.app
+    cors_origin_regex: str = ""
     admin_access_code: str = ""
 
 
 settings = Settings()
+
+
+def browser_origins() -> list[str]:
+    found = {
+        settings.frontend_url.strip().rstrip("/"),
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    }
+    for piece in settings.cors_origins.split(","):
+        cleaned = piece.strip().rstrip("/")
+        if cleaned:
+            found.add(cleaned)
+    return sorted(origin for origin in found if origin)

@@ -1,4 +1,4 @@
-import { currentToken } from "@/lib/auth";
+import { currentToken, setUser } from "@/lib/auth";
 import { toProctorAck } from "@/lib/proctor/api";
 import type {
   AnswerResult,
@@ -43,21 +43,34 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** Public API origin. Empty in local dev, so HTTP stays on the Next.js `/api` rewrite. No trailing slash, no `/api` suffix. */
+export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+
+const UNREACHABLE = API_ORIGIN
+  ? "The interview server is unreachable."
+  : "The interview server is unreachable. Start the FastAPI backend on port 8000.";
+
+function endpoint(path: string): string {
+  return API_ORIGIN ? `${API_ORIGIN}/api${path}` : `/api${path}`;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const isForm = init.body instanceof FormData;
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, {
+    response = await fetch(endpoint(path), {
       ...init,
       headers: isForm ? { ...authHeader(), ...init.headers } : { "Content-Type": "application/json", ...authHeader(), ...init.headers },
     });
   } catch {
-    throw new ApiError("The interview server is unreachable. Start the FastAPI backend on port 8000.", 0);
+    throw new ApiError(UNREACHABLE, 0);
   }
   const text = await response.text();
   const body = text ? safeJson(text) : null;
   if (!response.ok) {
-    const fallback = response.status >= 500 && !body ? "The interview server is unreachable. Start the FastAPI backend on port 8000." : `Request failed (${response.status})`;
+    // The server no longer knows this token, so stop showing the user as signed in.
+    if (response.status === 401 && currentToken()) setUser(null);
+    const fallback = response.status >= 500 && !body ? UNREACHABLE : `Request failed (${response.status})`;
     throw new ApiError(messageFrom(body, fallback), response.status);
   }
   return body as T;
@@ -77,10 +90,10 @@ const post = <T>(path: string, body?: unknown) =>
 async function audioRequest(path: string, signal?: AbortSignal): Promise<Blob> {
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, { headers: { Accept: "audio/wav" }, signal });
+    response = await fetch(endpoint(path), { headers: { Accept: "audio/wav" }, signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError("The interview server is unreachable. Start the FastAPI backend on port 8000.", 0);
+    throw new ApiError(UNREACHABLE, 0);
   }
   if (!response.ok) {
     const text = await response.text();
@@ -92,7 +105,7 @@ async function audioRequest(path: string, signal?: AbortSignal): Promise<Blob> {
   return audio;
 }
 
-const LISTEN_ORIGIN = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const LISTEN_ORIGIN = API_ORIGIN || "http://127.0.0.1:8000";
 
 export function listenSocketUrl(sessionId: string): string {
   const origin = LISTEN_ORIGIN.replace(/\/$/, "").replace(/^http/i, "ws");

@@ -1,11 +1,11 @@
 import threading
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException, UploadFile, WebSocket
+from fastapi import APIRouter, Header, HTTPException, UploadFile, WebSocket
 from fastapi.responses import Response
 from app.core.config import settings
 from app.domain.schemas import AnswerRequest, DSAAnswerRequest, DSAStartRequest, ProctorEventRequest, StartSessionRequest, RegisterRequest, LoginRequest, VisionObservationRequest, SectionStartRequest
 from app.api.code_routes import execute, public_problem
-from app.api.deps import access_code_ok
+from app.api.deps import access_code_ok, require_admin, user_from_authorization
 from app.problems import problem_for_difficulty
 from app.services.prepared_problems import problem_for_session
 from app.services.assessment import evaluate_dsa_submission
@@ -78,6 +78,37 @@ def session_or_404(session_id: str):
     return session
 
 
+def recruiter_session(session) -> bool:
+    """Opened from a recruiter's link. Scores and written feedback on it are for the recruiter only."""
+    return bool(session.profile.get("interview_id"))
+
+
+def candidate_session(session_id: str, authorization: str | None):
+    """The session, when the caller is the candidate taking it. Practice sessions have no owner."""
+    session = session_or_404(session_id)
+    if recruiter_session(session):
+        user = user_from_authorization(authorization)
+        if user["email"] != session.profile.get("candidate_email"):
+            raise HTTPException(403, "This interview belongs to another candidate")
+    return session
+
+
+def recruiter_or_403(session, authorization: str | None) -> None:
+    """Only the interviewer who published the link may read an attempt's report."""
+    if not recruiter_session(session):
+        return
+    admin = require_admin(authorization)
+    interview = repository.get_interview(session.profile["interview_id"])
+    if not interview or interview.get("created_by_email") != admin["email"]:
+        raise HTTPException(404, "Session not found")
+
+
+def dsa_for_candidate(session, dsa: dict) -> dict:
+    if not recruiter_session(session):
+        return dsa
+    return {key: value for key, value in dsa.items() if key != "evaluation"}
+
+
 def ensure_active(session):
     if session.disqualified:
         raise HTTPException(403, "Session has been disqualified after the warning limit was reached")
@@ -92,10 +123,13 @@ def dsa_seconds_left(dsa: dict) -> int:
 def session_summary(session) -> dict:
     profile = session.profile
     voice = conversation.progress(session) if session.sections.get(session.active_section or "") == "in_progress" else None
+    for_recruiter = recruiter_session(session)
     dsa = None
     if session.dsa:
         dsa = {key: session.dsa.get(key) for key in ("problem_slug", "title", "difficulty", "duration_minutes", "submitted", "language", "evaluation")}
         dsa["seconds_left"] = 0 if session.dsa.get("submitted") else dsa_seconds_left(session.dsa)
+        if for_recruiter:
+            dsa["evaluation"] = None
     return {
         "session_id": session.id,
         "candidate_name": profile.get("candidate_name"),
@@ -110,7 +144,8 @@ def session_summary(session) -> dict:
         "warning_limit": settings.proctor_warning_limit,
         "disqualified": session.disqualified,
         "warnings_log": [{"type": event.get("type"), "details": event.get("details", ""), "observed_at": event.get("observed_at")} for event in session.proctor_events if event.get("type") in WARNING_EVENTS],
-        "round_scores": session.round_scores,
+        "round_scores": {} if for_recruiter else session.round_scores,
+        "recruiter_session": for_recruiter,
         "created_at": session.created_at,
     }
 
@@ -127,8 +162,8 @@ def start_session(request: StartSessionRequest):
 
 
 @router.get("/sessions/{session_id}")
-def get_session(session_id: str):
-    return session_summary(session_or_404(session_id))
+def get_session(session_id: str, authorization: str | None = Header(default=None)):
+    return session_summary(candidate_session(session_id, authorization))
 
 
 @router.get("/sessions/{session_id}/speech")
@@ -160,8 +195,8 @@ async def listen(websocket: WebSocket, session_id: str):
 
 
 @router.post("/sessions/{session_id}/answer")
-def submit_answer(session_id: str, request: AnswerRequest):
-    session = session_or_404(session_id)
+def submit_answer(session_id: str, request: AnswerRequest, authorization: str | None = Header(default=None)):
+    session = candidate_session(session_id, authorization)
     ensure_active(session)
     if session.current_question >= len(session.questions):
         raise HTTPException(409, "Interview is already complete")
@@ -173,6 +208,8 @@ def submit_answer(session_id: str, request: AnswerRequest):
             except conversation.SkipNotAllowed as exc:
                 raise HTTPException(409, str(exc)) from exc
             repository.save_session(session)
+        if recruiter_session(session):
+            result["feedback"] = None
         return result
     question = session.questions[session.current_question]
     feedback = agent.critique(question, request.answer, session.profile, section)
@@ -185,20 +222,21 @@ def submit_answer(session_id: str, request: AnswerRequest):
         session.sections[section] = "completed"
         session.active_section = None
     repository.save_session(session)
-    return {"feedback": feedback, "next_question": next_question, "question_number": session.current_question + 1, "total_questions": len(session.questions), "complete": next_question is None}
+    shown = None if recruiter_session(session) else feedback
+    return {"feedback": shown, "next_question": next_question, "question_number": session.current_question + 1, "total_questions": len(session.questions), "complete": next_question is None}
 
 
 @router.post("/sessions/{session_id}/section")
-def start_section(session_id: str, request: SectionStartRequest):
+def start_section(session_id: str, request: SectionStartRequest, authorization: str | None = Header(default=None)):
     with _lock_for(session_id):
-        return _start_section(session_id, request)
+        return _start_section(session_id, request, authorization)
 
 
-def _start_section(session_id: str, request: SectionStartRequest):
-    session = session_or_404(session_id)
+def _start_section(session_id: str, request: SectionStartRequest, authorization: str | None):
+    session = candidate_session(session_id, authorization)
     ensure_active(session)
     if request.section == "dsa":
-        return start_dsa(session_id, DSAStartRequest())
+        return start_dsa(session_id, DSAStartRequest(), authorization)
     status = session.sections.get(request.section)
     if status in {"completed", "skipped"}:
         raise HTTPException(409, f"The {request.section} section is already {status}")
@@ -208,10 +246,14 @@ def _start_section(session_id: str, request: SectionStartRequest):
 
 
 @router.post("/sessions/{session_id}/sections/{section}/skip")
-def skip_section(session_id: str, section: str):
-    session = session_or_404(session_id)
+def skip_section(session_id: str, section: str, authorization: str | None = Header(default=None)):
+    session = candidate_session(session_id, authorization)
+    ensure_active(session)
     if section not in SECTIONS:
         raise HTTPException(404, "Unknown section")
+    if recruiter_session(session):
+        # The overall score averages finished rounds, so a skip would lift it.
+        raise HTTPException(409, "The recruiter chose the rounds for this interview, so they cannot be skipped")
     if session.sections[section] != "not_started":
         raise HTTPException(409, "Only sections that have not started can be skipped")
     session.sections[section] = "skipped"
@@ -220,15 +262,15 @@ def skip_section(session_id: str, section: str):
 
 
 @router.post("/sessions/{session_id}/transcribe")
-async def transcribe_answer(session_id: str, audio: UploadFile):
-    session_or_404(session_id)
+async def transcribe_answer(session_id: str, audio: UploadFile, authorization: str | None = Header(default=None)):
+    candidate_session(session_id, authorization)
     text = agent.transcribe_audio(await audio.read())
     return {"transcript": text}
 
 
 @router.post("/sessions/{session_id}/dsa/start")
-def start_dsa(session_id: str, request: DSAStartRequest):
-    session = session_or_404(session_id)
+def start_dsa(session_id: str, request: DSAStartRequest, authorization: str | None = Header(default=None)):
+    session = candidate_session(session_id, authorization)
     ensure_active(session)
     status = session.sections.get("dsa")
     if status == "skipped":
@@ -257,15 +299,15 @@ def start_dsa(session_id: str, request: DSAStartRequest):
         if problem is None:
             raise HTTPException(409, "The coding problem for this attempt is no longer available")
     return {
-        **session.dsa,
+        **dsa_for_candidate(session, session.dsa),
         "problem": public_problem(problem),
         "ends_in_seconds": 0 if session.dsa["submitted"] else dsa_seconds_left(session.dsa),
     }
 
 
 @router.post("/sessions/{session_id}/dsa/submit")
-def submit_dsa(session_id: str, request: DSAAnswerRequest):
-    session = session_or_404(session_id)
+def submit_dsa(session_id: str, request: DSAAnswerRequest, authorization: str | None = Header(default=None)):
+    session = candidate_session(session_id, authorization)
     ensure_active(session)
     if not session.dsa:
         raise HTTPException(409, "Start a DSA assessment first")
@@ -290,12 +332,13 @@ def submit_dsa(session_id: str, request: DSAAnswerRequest):
     if session.active_section == "dsa":
         session.active_section = None
     repository.save_session(session)
-    return {**judged, "evaluation": evaluation, "dsa": {k: v for k, v in session.dsa.items() if k != "code"}}
+    shown = dsa_for_candidate(session, {k: v for k, v in session.dsa.items() if k != "code"})
+    return {**judged, "evaluation": shown.get("evaluation"), "dsa": shown}
 
 
 @router.post("/sessions/{session_id}/proctor-events")
-def record_proctor_event(session_id: str, request: ProctorEventRequest):
-    session = session_or_404(session_id)
+def record_proctor_event(session_id: str, request: ProctorEventRequest, authorization: str | None = Header(default=None)):
+    session = candidate_session(session_id, authorization)
     outcome = record_observation(session, request.event_type.value, request.details)
     outcome["event"]["observed_at"] = store.now()
     repository.save_session(session)
@@ -303,13 +346,13 @@ def record_proctor_event(session_id: str, request: ProctorEventRequest):
 
 
 @router.post("/sessions/{session_id}/vision-observations")
-def record_vision_observation(session_id: str, request: VisionObservationRequest):
+def record_vision_observation(session_id: str, request: VisionObservationRequest, authorization: str | None = Header(default=None)):
     """Persist transparent signals; no signal is proof of malpractice.
 
     A condition that stays true across polls counts once. The warning can fire
     again only after the camera reports that the condition cleared.
     """
-    session = session_or_404(session_id)
+    session = candidate_session(session_id, authorization)
     outcomes = []
     if rising_edge(session, "face_missing", request.face_visible is False):
         outcomes.append(record_observation(session, "face_missing", "Face was not detected by the camera."))
@@ -335,5 +378,11 @@ def record_vision_observation(session_id: str, request: VisionObservationRequest
 
 
 @router.get("/sessions/{session_id}/report")
-def report(session_id: str):
-    return build_report(session_or_404(session_id))
+def report(session_id: str, authorization: str | None = Header(default=None)):
+    session = session_or_404(session_id)
+    recruiter_or_403(session, authorization)
+    cached = session.report_cache
+    built = build_report(session)
+    if session.report_cache is not cached:
+        repository.save_session(session)
+    return built

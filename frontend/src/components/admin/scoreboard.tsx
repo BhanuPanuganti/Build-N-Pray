@@ -39,7 +39,7 @@ export function Scoreboard({ attempts }: { attempts: Attempt[] }) {
       <div className="rounded-2xl border border-dashed border-line px-6 py-16 text-center">
         <p className="font-display text-xl font-semibold text-ink">No one has started yet</p>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-2">
-          Share the interview link. After a student signs in and begins, their name, round scores, and report appear here.
+          Share the interview link. After a candidate signs in and begins, their name, round scores, and report appear here.
         </p>
       </div>
     );
@@ -65,7 +65,9 @@ export function Scoreboard({ attempts }: { attempts: Attempt[] }) {
             <tr key={attempt.session_id} className="border-b border-line last:border-0">
               <td className="px-4 py-4 font-mono text-sm text-ink-3">{attempt.rank}</td>
               <td className="px-4 py-4">
-                <p className="text-sm font-medium text-ink">{attempt.name}</p>
+                <Link href={`/report/${attempt.session_id}`} className="text-sm font-medium text-ink hover:text-accent hover:underline">
+                  {attempt.name}
+                </Link>
                 <p className="text-[13px] text-ink-3">{attempt.email}</p>
                 <p className="text-[12px] text-ink-3">{when(attempt.started_at)}</p>
               </td>

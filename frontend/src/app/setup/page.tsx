@@ -99,7 +99,7 @@ export default function SetupPage() {
           <div>
             <h1 className="font-display text-4xl font-semibold text-ink">Set up your mock interview</h1>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-2">
-              The questions are written from the job description and your résumé, so the more specific they are, the closer this feels to the real thing. To send the same interview to several students,{" "}
+              The questions are written from the job description and your résumé, so the more specific they are, the closer this feels to the real thing. To send the same interview to several candidates,{" "}
               <Link href="/admin" className="font-medium text-ink underline">
                 publish a link
               </Link>

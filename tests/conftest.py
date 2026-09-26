@@ -70,6 +70,15 @@ def scripted_reply(system: str, user: str, max_tokens: int, temperature: float, 
     if '"skills": [' in user:
         skills = re.findall(r"^\d+\. \[covered\] ([^:]+):", user, flags=re.M)
         return json.dumps({"skills": [{"skill": s, "level": "solid", "rating": 76, "evidence": "Gave a concrete example."} for s in skills], "summary": "Solid round."})
+    # Checked before the brief: a link session's prompt carries the recruiter's brief, keys and all.
+    if '"follow_up_questions"' in user:
+        return json.dumps({
+            "summary": "The candidate solved the coding problem and explained their API work.",
+            "communication_assessment": {"clarity": "Clear.", "answer_structure": "Structured.", "evidence": "Some numbers."},
+            "strengths": ["Passed every hidden test."],
+            "gaps": ["Did not say how they measured latency; a strong answer would give before and after numbers."],
+            "follow_up_questions": ["How did you measure the speed-up?"],
+        })
     user = re.sub(r"Your earlier reading of this candidate:\n.*?\n\n", "", user, flags=re.S)
     if '{"questions"' in user:
         count = int(re.search(r"Write exactly (\d+)", user).group(1))
@@ -80,8 +89,6 @@ def scripted_reply(system: str, user: str, max_tokens: int, temperature: float, 
         return json.dumps({"score": 72, "strength": "Clear example.", "improvement": "Add a measurable result.", "role_relevance": "Relevant to the API work."})
     if '"time_complexity"' in user:
         return json.dumps({"time_complexity": "O(n)", "space_complexity": "O(n)", "approach": "hash map", "meets_target": True, "complexity_feedback": "Linear.", "code_quality_feedback": "Readable."})
-    if '"next_steps"' in user:
-        return json.dumps({"summary": "Solid practice run.", "communication_assessment": {"clarity": "Clear.", "answer_structure": "Structured.", "evidence": "Some numbers."}, "next_steps": ["Practice trade-offs."]})
     raise AssertionError(f"Unexpected agent prompt: {user[:200]}")
 
 

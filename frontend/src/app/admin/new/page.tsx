@@ -1,15 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DocumentInput } from "@/components/setup/document-input";
+import { InterviewerGate } from "@/components/admin/interviewer-gate";
 import { SiteHeader } from "@/components/site-header";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth";
+import { useHydrated } from "@/lib/use-hydrated";
 import type { Difficulty, InterviewDraft } from "@/lib/types";
 
 const SAMPLE = {
@@ -22,7 +24,7 @@ const SAMPLE = {
 export default function NewInterviewPage() {
   const router = useRouter();
   const user = useUser();
-  const [ready, setReady] = useState(false);
+  const ready = useHydrated();
   const [role, setRole] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [focus, setFocus] = useState(SAMPLE.interview_focus);
@@ -33,8 +35,6 @@ export default function NewInterviewPage() {
   const [fundamentalsCount, setFundamentalsCount] = useState(3);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => setReady(true), []);
 
   const complete = role.trim().length >= 2 && jobDescription.trim().length >= 30 && focus.trim().length >= 5;
   const counts = [3, 4, 5].map((n) => ({ value: n, label: String(n) }));
@@ -63,15 +63,12 @@ export default function NewInterviewPage() {
     }
   }
 
-  if (ready && user?.role !== "admin") {
+  if (!ready || user?.role !== "admin") {
     return (
       <>
         <SiteHeader />
-        <main className="mx-auto max-w-lg flex-1 px-5 py-20">
-          <p className="font-display text-2xl font-semibold text-ink">Interviewer account needed</p>
-          <LinkButton href="/sign-in?next=/admin/new" className="mt-6">
-            Sign in
-          </LinkButton>
+        <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24 pt-14 sm:px-8">
+          {ready && <InterviewerGate next="/admin/new" />}
         </main>
       </>
     );
@@ -83,7 +80,7 @@ export default function NewInterviewPage() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-5 pb-24 pt-14 sm:px-8">
         <h1 className="font-display text-4xl font-semibold text-ink">New interview</h1>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-ink-2">
-          The agent reads this job description once, writes a complete coding problem with tests, and later asks each student spoken questions from the same criteria and their résumé.
+          The agent reads this job description once, writes a complete coding problem with tests, and later interviews each candidate out loud from the same criteria and their résumé.
         </p>
         <form onSubmit={submit} className="mt-10 space-y-8">
           <Field label="Job title">{(id) => <Input id={id} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Software Engineer" />}</Field>
@@ -119,13 +116,14 @@ export default function NewInterviewPage() {
           )}
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <p className="mb-2 text-sm font-medium text-ink">Project questions</p>
-              <Segmented label="Project questions" value={projectCount} onChange={setProjectCount} options={counts} />
+              <p className="mb-2 text-sm font-medium text-ink">Project topics</p>
+              <Segmented label="Project topics" value={projectCount} onChange={setProjectCount} options={counts} />
             </div>
             <div>
-              <p className="mb-2 text-sm font-medium text-ink">Fundamentals questions</p>
-              <Segmented label="Fundamentals questions" value={fundamentalsCount} onChange={setFundamentalsCount} options={counts} />
+              <p className="mb-2 text-sm font-medium text-ink">Fundamentals topics</p>
+              <Segmented label="Fundamentals topics" value={fundamentalsCount} onChange={setFundamentalsCount} options={counts} />
             </div>
+            <p className="text-[13px] text-ink-3 sm:col-span-2">Each topic gets an opening question and up to two follow-ups, depending on the answers.</p>
           </div>
           <div className="flex flex-wrap items-center gap-4 border-t border-line pt-8">
             <Button type="submit" size="lg" disabled={!complete} loading={busy}>

@@ -1,137 +1,157 @@
-# BNB Interview Coach
+# BNB Interviews
 
-A practice interview for technical roles. A candidate rehearses a timed coding round and a spoken conversation written from a job description and a résumé. An interviewer can publish that job once, share a link, and read a scoreboard of who attempted it.
+**An AI technical interviewer for recruiters.**
 
-Scores, written feedback, and camera observations are a practice record. They are there so the candidate and the interviewer can see what happened.
+Publish a job, share one link, and read a written report on every candidate.
+
+## Overview
+
+The recruiter publishes a job description and what to focus on. Each candidate who opens the link gets an interview built from that job and their own résumé:
+
+1. **Coding round.** A timed DSA problem the agent wrote for this job, solved in a real editor.
+2. **Project round.** A spoken conversation about the projects on their résumé.
+3. **Fundamentals round.** A spoken conversation about the core concepts the job relies on.
+
+The recruiter gets a ranked scoreboard and a report per candidate. Candidates never see their scores.
 
 ## Features
 
-### Accounts
+### The agents
 
-- Candidates sign up by default and keep sessions under their email.
-- Interviewers publish jobs. Creating an interviewer account requires `ADMIN_ACCESS_CODE`.
-- Sign-in is a bearer token. The browser stores the account in `localStorage`.
+BNB runs the interview with six specialised agents. Each has its own prompt and a strict JSON schema, and each reply is validated before anything reaches the candidate.
 
-### Solo rehearsal
+| Agent              | What it does                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Profiler**       | Reads the job, the recruiter's focus and the résumé into a private brief: key requirements, résumé highlights, and the gaps worth probing                                                        |
+| **Problem Author** | Writes an original DSA problem for the role, then runs its own reference solution in a sandbox to produce the expected outputs, so every test case is verified. The reference is then discarded. |
+| **Planner**        | Picks the skills each spoken round needs evidence on, drawing on the job and on what this candidate claims to have built                                                                         |
+| **Interviewer**    | After every answer: rates it privately, notes claims worth checking, updates its read on the skill, and chooses the next move                                                                    |
+| **Code Reviewer**  | Reads the submission against the sandbox results and judges its real time and space complexity against the target                                                                                |
+| **Reporter**       | Turns the whole session into a recruiter-facing report, with evidence for every rating and follow-up questions aimed at what the interview couldn't confirm                                      |
 
-From `/setup`, a candidate pastes or uploads a résumé (PDF, DOCX, or TXT), adds a job description, and chooses the rounds. The agent reads that profile and runs the interview. Coding problems in this mode come from the practice bank.
+The Interviewer's moves:
 
-### Interviewer links
+| Move                                      | Example                                                 |
+| ----------------------------------------- | ------------------------------------------------------- |
+| Follow up on a vague answer or a claim    | "How did you measure that speed-up?"                    |
+| Pick up something relevant they mentioned | "You mentioned Java. How comfortable are you with OOP?" |
+| Move to the next skill                    | When it has enough evidence either way                  |
+| Wrap up                                   | When the round's turn budget is spent                   |
 
-An interviewer posts a role, a job description, and the criteria they care about. The agent prepares the interview once:
+A conversation engine keeps the Interviewer on track. Each round has a turn budget, with caps on follow-ups per topic and on chasing mentions. The allowed moves are recomputed on every turn. If the model picks a move outside the budget, it gets one targeted correction. If it strays again, the engine bends the move back within limits. The result is a round that digs where the evidence is thin and still finishes on time.
 
-- A coding problem written for that job, with a statement, starter code, and tests. Expected outputs come from running a reference solution locally. The reference is not stored. Hidden tests stay on the server.
-- Spoken rounds that use the same job, then the student's own résumé once they join.
+### Voice, powered by [Cartesia](https://cartesia.ai)
 
-The interviewer gets one link (`/i/<token>`). A student must sign in, then starts. After attempts, the scoreboard lists name, email, status, per-round scores, the overall score, and a link to the written report.
+- **Sonic 3.5** speaks each question aloud. The text stays on screen.
+- **Ink 2** transcribes the spoken answer live. The candidate can edit the transcript before submitting.
+- All Cartesia calls go through the API, so the key never reaches the browser. If Cartesia is unavailable, the browser's own voice takes over.
 
 ### Coding round
 
-- Monaco editor with question on the left and the editor on the right. Thirteen languages, with light and dark themes matched to the app.
-- Visible samples can be run freely. Submit runs the hidden tests and finishes the round.
-- Starter code parses stdin so the candidate works on the solution.
-- Drafts persist per problem and language. The timer lives on the server, so a refresh does not reset it. When time runs out, the current code is submitted.
-- Correctness comes from executing the code (Judge0 by default). The agent writes the complexity and quality notes. If the agent is unavailable at submit time, the tests still count and the complexity note is labelled as an estimate.
+- Monaco editor in 13 languages. Starter code already parses the input.
+- Code runs in a Judge0 sandbox against hidden tests. The agent reviews complexity against the target.
+- The timer is kept on the server, and drafts are saved. When time runs out, the current code is submitted.
 
-### Spoken rounds
+### Recruiter report
 
-Project and fundamentals are a conversation, not a fixed question list. The interviewer plans topics from the job and the résumé, follows up, probes claims, and moves on when an answer is enough. One question at a time. Scores stay off the screen until the report.
+Written in the third person, never as coaching. For example:
 
-Each skill discussed gets a rating and the evidence behind it. A round score is the average of those ratings. The overall score averages the rounds that were completed.
+> **What they didn't show.** Did not say how they measured latency. A strong answer would give before and after numbers.
 
-### Voice
-
-Questions are read aloud with Cartesia, and the text stays on screen. The candidate can speak an answer; the transcript stays editable, and that written text is what gets scored. Typing works when the microphone is off. If Cartesia is unavailable, the browser voice asks the question. The coding round is not read aloud.
+Each report includes round scores, per-skill ratings with evidence, notes on communication, the submitted code, and questions for a follow-up interview.
 
 ### Monitoring
 
-The session can use the camera and microphone and can record leaving the tab, leaving full screen, a missing face, more than one person, lighting, a phone, and eyes held off the screen. A glance at the keyboard waits before it counts. Mouth movement is kept for review and does not add a warning. One continuous condition is one warning. Five warnings lock the practice round. The report lists what was observed.
+Runs in the candidate's browser with MediaPipe and TensorFlow.js, and no video is uploaded. It records a missing face, extra people, a phone, gaze held off the screen, tab switches and full-screen exits. The recruiter sees these as observations to review, not verdicts.
 
-### Report
+## Under the hood
 
-The report speaks to the candidate as "you": round scores, skill ratings, what worked, what to improve, the coding review, and the monitoring log. It lives outside the session layout so opening it does not start the camera.
+**Self-healing model layer.** The agents run on Qwen 2.5 72B through Hugging Face, with Gemini and Groq behind it. A provider that fails is benched for five minutes, or for as long as its rate limit says, so the next call goes straight to a healthy one. If every provider is rate-limited briefly, the layer waits and retries instead of failing. A malformed reply gets a stricter second request, and fenced or half-wrapped JSON is recovered before validation.
 
-## Stack
+**Verified problem authoring.** A problem only ships if its tests hold up. The author's reference solution runs on every case. Cases it crashes on are dropped, and the problem is kept only if at least two visible and two hidden cases survive. Double-escaped newlines, a common model error, are repaired before anything runs.
 
-- API: FastAPI, Python 3.13, LangGraph
-- App: Next.js 16, React, Tailwind CSS 4, Monaco
-- Agent: Hugging Face by default (`Qwen/Qwen2.5-72B-Instruct`), with Gemini and Groq as fallbacks
-- Code: Judge0 Community Edition, or a local runner for offline development
-- Data: MongoDB, with an in-memory store when `MONGODB_URI` is empty
-- Voice: Cartesia
+**Streaming voice pipeline.** The browser streams 16 kHz PCM over a WebSocket to the API, which relays it to Cartesia Ink 2. Ink's turn events are folded into one running transcript, so a pause mid-thought never ends the answer. Spoken questions are synthesised server-side with Sonic 3.5 and cached per question.
 
-## Run locally
+**On-device vision.** Gaze is computed from MediaPipe iris landmarks and eye-look blendshapes. A downward glance at the keyboard gets a five-second grace period, while looking sideways or up is timed at once. COCO-SSD detects phones and extra people. The server counts each condition once per episode, so a camera polling every two seconds can't burn through the warning limit. In Chromium, the Keyboard Lock API holds Escape so a single press can't drop the candidate out of full screen.
 
-From `Build-N-Pray/`:
+**Sandboxed judging.** Each submission runs as one Judge0 batch across every test. CPU limits include an allowance for interpreter start-up, so a busy public instance can't fail correct code at random. Output is compared line by line with trailing whitespace ignored, and hidden inputs never leave the server.
+
+**Access control built in.** Every session endpoint checks who is calling. Candidates can only reach their own attempt, and only the recruiter who published an interview can read its reports. Scores, agent notes and the recruiter's brief are removed from every response a candidate receives.
+
+## Scoring
+
+| Score        | Calculation                                                                        |
+| ------------ | ---------------------------------------------------------------------------------- |
+| Coding       | Up to 85 for tests passed, plus 15 if all pass and the complexity meets the target |
+| Spoken round | Average of the per-skill ratings                                                   |
+| Overall      | Average of the completed rounds                                                    |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client["Next.js"]
+        UI["Recruiter and candidate UI"]
+        CAM["On-device monitoring"]
+    end
+
+    subgraph Server["FastAPI"]
+        AG["Six agents<br/>+ conversation engine"]
+        RUN["Code runner"]
+        VOICE["Voice bridge"]
+    end
+
+    UI --> Server
+    CAM --> Server
+    AG --> LLM["Qwen 2.5 72B<br/>Gemini, Groq fallback"]
+    RUN --> J0["Judge0"]
+    VOICE --> CT["Cartesia"]
+    Server --> DB[("MongoDB Atlas")]
+```
+
+| Layer          | Technology                                                      |
+| -------------- | --------------------------------------------------------------- |
+| Frontend       | Next.js 16, React, Tailwind CSS 4, Monaco                       |
+| Backend        | FastAPI, Python 3.13, LangGraph                                 |
+| Models         | Qwen 2.5 72B on Hugging Face, with Gemini and Groq as fallbacks |
+| Voice          | Cartesia Sonic 3.5 and Ink 2                                    |
+| Code execution | Judge0                                                          |
+| Monitoring     | MediaPipe Face Landmarker, TensorFlow.js COCO-SSD               |
+| Database       | MongoDB Atlas                                                   |
+| Hosting        | Vercel and Railway                                              |
+
+## Getting started
 
 ```powershell
+# API, from Build-N-Pray/
 uv sync
 copy .env.example .env
 uv run main.py
-```
 
-From `Build-N-Pray/frontend/`, in a second terminal:
-
-```powershell
+# Frontend, from Build-N-Pray/frontend/
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. The API listens on `http://127.0.0.1:8000`. The Next.js app proxies `/api` to it, so the browser talks only to port 3000.
+Open `http://localhost:3000`. To try it:
 
-Set `HUGGINGFACE_API_KEY` before starting an interview. There is no demo mode. If the agent is down, the app says so.
+1. Create an interviewer account with `ADMIN_ACCESS_CODE`.
+2. Publish a job.
+3. Take the link as a candidate in a private window.
 
-Publishing an interviewer link calls the agent twice (a brief, then the coding problem) and can take a minute or two. The dev proxy waits up to three minutes for that request.
+### Environment
 
-Check the live agent, voice, and code runner with:
+| Variable                         | Purpose                                    |
+| -------------------------------- | ------------------------------------------ |
+| `HUGGINGFACE_API_KEY`            | Interview agent (required)                 |
+| `GEMINI_API_KEY`, `GROQ_API_KEY` | Fallback providers                         |
+| `CARTESIA_API_KEY`               | Spoken questions and answers               |
+| `MONGODB_URI`                    | Database. If empty, data is kept in memory |
+| `ADMIN_ACCESS_CODE`              | Required to create an interviewer account  |
+| `CODE_RUNNER`                    | `judge0` (default) or `local`              |
 
-```powershell
-.\.venv\Scripts\python.exe scripts\check_live_services.py
-```
-
-## Configuration
-
-Copy `.env.example` to `.env`. Leave a value empty to skip that service.
-
-| Variable | Purpose |
-| --- | --- |
-| `HUGGINGFACE_API_KEY` | Required for the interview agent |
-| `HF_CHAT_MODEL` | Chat model. Default `Qwen/Qwen2.5-72B-Instruct` |
-| `AGENT_PROVIDERS` | Provider order. Default `huggingface,gemini,groq` |
-| `GEMINI_API_KEY`, `GROQ_API_KEY` | Optional fallbacks |
-| `MONGODB_URI` | Atlas or local Mongo. Empty uses in-memory storage |
-| `MONGODB_DATABASE` | Default `bnb_interview` |
-| `CARTESIA_API_KEY` | Spoken questions and speech-to-text |
-| `CODE_RUNNER` | `judge0` (default) or `local` |
-| `JUDGE0_URL` | Default `https://ce.judge0.com` (no key) |
-| `JUDGE0_API_KEY` | RapidAPI key or self-hosted auth token |
-| `ADMIN_ACCESS_CODE` | Required to create an interviewer account |
-| `FRONTEND_URL` | Default `http://localhost:3000` |
-
-If the API is not on port 8000, set `API_URL` in `frontend/.env.local`. Spoken answers also need `NEXT_PUBLIC_API_URL` pointed at the same API host. See `frontend/.env.example`.
-
-## App
-
-| Route | What it is |
-| --- | --- |
-| `/` | Home |
-| `/sign-in` | Sign in or create an account |
-| `/setup` | Solo interview setup |
-| `/session/[id]` | Interview map. `?section=project` or `?section=fundamentals` opens the conversation |
-| `/session/[id]/dsa` | Timed coding round |
-| `/report/[id]` | Written report |
-| `/admin`, `/admin/new` | Interviewer list and new job |
-| `/admin/interviews/[id]` | Scoreboard and the public coding problem |
-| `/i/[token]` | Shared interview link |
-
-## Tests
+### Tests
 
 ```powershell
 uv run --with pytest pytest
 ```
-
-Interview tests use a scripted agent and an in-memory database, so they do not call Hugging Face or write to MongoDB.
-
-## Documentation
-
-Longer notes live in `documentations and learnings/` (agent, interviewer links, conversational rounds, code execution, frontend, Cartesia) and `documentations/` (MongoDB, proctoring, Cartesia credentials). Product intent is in `Product Philosophy.md`.

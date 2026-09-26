@@ -11,7 +11,7 @@ the model and validates what comes back.
 """
 from __future__ import annotations
 
-from app.services.agent import FAIRNESS, _score, _strings, agent
+from app.services.agent import FAIRNESS, FOR_RECRUITER, _score, _strings, agent
 
 DECISIONS = ("follow_up", "probe_mention", "next_topic", "wrap_up")
 SIGNALS = ("strong", "solid", "partial", "weak", "no_answer")
@@ -173,6 +173,8 @@ def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tu
         rating = (
             "Rate only the latest answer from 0 to 100 against what you asked and what the job needs: 90+ exceptional and specific, "
             "70-89 solid, 50-69 partly right or vague, 30-49 weak, below 30 missing, wrong or off-topic.\n"
+            "The assessment and topic_verdict are private notes for the recruiter, never read to the candidate. "
+            + FOR_RECRUITER + "\n"
         )
     prompt = (
         agent._profile_context(profile)
@@ -181,7 +183,8 @@ def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tu
         f"Current topic: {topic['skill']}\nYou just asked: {question}\n{latest}"
         f"{budget}\n\n{rating}"
         'Return JSON: {"assessment": {"score": number, "signal": one of "strong", "solid", "partial", "weak", "no_answer", '
-        '"strength": one sentence on what worked, quoting them where you can, "improvement": one concrete sentence on what was missing, '
+        '"strength": one sentence on what the candidate showed, quoting them where you can, '
+        '"improvement": one sentence on what they left out that a strong answer would have included, '
         '"role_relevance": one sentence on how it maps to the job}, '
         '"mentions": array of technologies, concepts or claims they brought up that are worth checking, '
         '"topic_verdict": {"level": one of "strong", "solid", "developing", "not_shown", "note": one sentence of evidence on the current topic so far}, '
@@ -219,8 +222,8 @@ def rate_round(profile: dict, section: str, state: dict) -> dict:
         return {"skills": skills, "summary": summary}
 
     return agent._json(
-        "You are the lead interviewer writing up one round of a technical interview. Be fair, specific and evidence-based. "
-        "Address the candidate as you. " + FAIRNESS,
+        "You are the lead interviewer writing up one round of a technical interview for the recruiter. Be fair, specific and evidence-based. "
+        + FOR_RECRUITER + FAIRNESS,
         agent._profile_context(profile)
         + f"\n\nThis was {_ROUND_GOAL[section]}\n\nTopics covered:\n{_topic_lines(state)}\n\n"
         f"Full conversation:\n{_transcript(state, limit=40)}\n\n"
@@ -230,8 +233,8 @@ def rate_round(profile: dict, section: str, state: dict) -> dict:
         "Rate the skill from the answers they actually gave, including follow-ups they answered before the skip. "
         "Do not raise a skill for a point you never heard, and do not lower it only because a later follow-up was skipped. "
         'Return JSON: {"skills": [{"skill": short name, "level": one of "strong", "solid", "developing", "not_shown", '
-        '"rating": number, "evidence": one sentence citing what they said}], '
-        '"summary": two sentences on what this round showed about the candidate for this job}.',
+        '"rating": number, "evidence": one or two sentences citing what they said and, below strong, what they did not show that a strong answer would have}], '
+        '"summary": two sentences for the recruiter on what this round showed about the candidate for this job}.',
         validate,
         max_tokens=1100,
         temperature=0.2,

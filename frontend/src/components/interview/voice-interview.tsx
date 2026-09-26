@@ -225,7 +225,7 @@ export function VoiceInterview({ sessionId, section }: Props) {
       {complete ? (
         <div className="mt-8 max-w-xl">
           <p className="text-[15px] leading-7 text-ink-2">
-            This round is over. The interviewer&apos;s rating of each skill you discussed, with the evidence behind it, is in your report.
+            This round is over and your answers are saved. Go back to the interview map for the next round.
           </p>
           <LinkButton className="mt-5" href={`/session/${sessionId}`}>
             Back to the interview map

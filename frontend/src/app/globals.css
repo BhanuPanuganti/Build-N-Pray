@@ -19,6 +19,12 @@
   --amber-soft: #fbf0dc;
   --danger: #b4403a;
   --danger-soft: #f8e5e3;
+  --field: #123a30;
+  --field-2: #184a3d;
+  --field-ink: #eef5f1;
+  --field-ink-2: #a8c5ba;
+  --field-line: #2c5c4e;
+  --field-mark: #e3a948;
   --shadow-color: 215 25% 20%;
   color-scheme: light;
 }
@@ -40,6 +46,12 @@
   --amber-soft: #2d2415;
   --danger: #e87d74;
   --danger-soft: #341d1c;
+  --field: #0d251f;
+  --field-2: #123129;
+  --field-ink: #e6efe9;
+  --field-ink-2: #92b3a7;
+  --field-line: #214a3e;
+  --field-mark: #e3a948;
   --shadow-color: 215 40% 3%;
   color-scheme: dark;
 }
@@ -61,6 +73,12 @@
   --color-amber-soft: var(--amber-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-field: var(--field);
+  --color-field-2: var(--field-2);
+  --color-field-ink: var(--field-ink);
+  --color-field-ink-2: var(--field-ink-2);
+  --color-field-line: var(--field-line);
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-display: var(--font-bricolage), var(--font-geist-sans), sans-serif;
@@ -72,6 +90,15 @@ html,
 body {
   background: var(--bg);
   color: var(--ink);
+}
+
+html {
+  scrollbar-color: var(--line-strong) transparent;
+  caret-color: var(--accent);
+}
+
+html:has([data-landing]) {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -158,7 +185,162 @@ body {
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
 
+/* Landing page motion: text resolves the way a live transcript does */
+@keyframes transcribe {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@keyframes voice-bar {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.word {
+  display: inline-block;
+  transition:
+    opacity 520ms var(--ease-expo),
+    transform 520ms var(--ease-expo),
+    filter 520ms var(--ease-expo);
+}
+.word[data-hidden] {
+  opacity: 0;
+  transform: translateY(0.3em);
+  filter: blur(5px);
+}
+
+.voice-bar {
+  transform-origin: center;
+  transform: scaleY(0.2);
+  transition: transform 300ms var(--ease-expo);
+}
+[data-voice="on"] .voice-bar {
+  animation: voice-bar 900ms ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -110ms);
+}
+
+.claim-mark {
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  background-image: linear-gradient(color-mix(in oklab, var(--amber) 24%, transparent), color-mix(in oklab, var(--amber) 24%, transparent));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 100%;
+  transition:
+    background-size 900ms var(--ease-expo),
+    color 400ms ease;
+}
+.claim-mark[data-on] {
+  background-size: 100% 100%;
+}
+
+@keyframes mark-sweep {
+  from {
+    background-size: 0% 42%;
+  }
+  to {
+    background-size: 100% 42%;
+  }
+}
+.hero-mark {
+  background-size: 100% 42%;
+  animation: mark-sweep 1100ms var(--ease-expo) 500ms both;
+}
+
+[data-play="armed"] .play-rise {
+  opacity: 0;
+}
+[data-play="playing"] .play-rise {
+  animation: transcribe 900ms var(--ease-expo) both;
+  animation-delay: calc(var(--i, 0) * 70ms + var(--d, 0ms));
+}
+
+[data-play="armed"] .play-sheet {
+  clip-path: inset(100% 0 0 0 round 24px);
+}
+[data-play="playing"] .play-sheet {
+  clip-path: inset(0 0 0 0 round 24px);
+  transition: clip-path 1300ms var(--ease-expo);
+}
+
+[data-play="armed"] .play-mark {
+  background-size: 0% 100%;
+}
+[data-play="static"] .play-mark,
+[data-play="playing"] .play-mark {
+  background-size: 100% 100%;
+  transition-delay: 1100ms;
+}
+
+.close-mark {
+  background-image: linear-gradient(var(--field-mark), var(--field-mark));
+  background-size: 100% 0.12em;
+  background-position: 0 92%;
+}
+[data-play="armed"] .close-mark {
+  background-size: 0% 0.12em;
+}
+[data-play="playing"] .close-mark {
+  transition-delay: 700ms;
+  transition-duration: 1200ms;
+}
+
+[data-play="armed"] .play-line {
+  opacity: 0;
+}
+[data-play="playing"] .play-line {
+  animation: transcribe 700ms var(--ease-expo) both;
+  animation-delay: calc(var(--i, 0) * 320ms + 200ms);
+}
+
+[data-play="armed"] .play-draw {
+  transform: scaleX(0);
+}
+.play-draw {
+  transform-origin: left;
+}
+[data-play="playing"] .play-draw {
+  transform: scaleX(1);
+  transition: transform 1400ms var(--ease-expo) 300ms;
+}
+
+.turn-in {
+  animation: transcribe 800ms var(--ease-expo) both;
+  animation-delay: calc(var(--i, 0) * 420ms);
+}
+
+@keyframes mark-full {
+  from {
+    background-size: 0% 100%;
+  }
+  to {
+    background-size: 100% 100%;
+  }
+}
+.mark-in {
+  background-size: 100% 100%;
+  animation: mark-full 900ms var(--ease-expo) both;
+  animation-delay: var(--md, 600ms);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html:has([data-landing]) {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {

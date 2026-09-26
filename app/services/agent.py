@@ -3,7 +3,8 @@
 It reads the candidate profile into a brief, writes the opening, project and
 fundamentals questions, authors the coding problem for an interviewer posting,
 scores each spoken answer, reviews the submitted code (Judge0 supplies the test
-results), and writes the final report.
+results), and writes the final report. Every judgment is written for the
+recruiter, about the candidate, never to the candidate.
 
 Every call asks for JSON so the output can be validated. There is no demo
 fallback: if the model cannot answer, AgentUnavailable surfaces as HTTP 503.
@@ -25,6 +26,11 @@ from app.services.coding_author import materialize_coding_problem
 FAIRNESS = (
     "Judge only the content and communication of what the candidate said or wrote. "
     "Never consider identity, appearance, accent, emotion or protected characteristics, and never make a hiring decision."
+)
+FOR_RECRUITER = (
+    "The reader is the recruiter or hiring panel, not the candidate. Write about the candidate in the third person "
+    "(the candidate, they), never as you, and never coach or encourage them. "
+    "Say what they showed and what they left out: what a strong answer would have covered that theirs did not. "
 )
 _SECTION_FOCUS = {
     "project": "project questions grounded in the résumé: architecture, technology choices, personal contribution, debugging, testing and trade-offs",
@@ -220,14 +226,17 @@ class InterviewAgent:
 
     @staticmethod
     def _profile_context(profile: dict) -> str:
+        focus = profile.get("interview_focus") or "general technical assessment"
+        goal = str(profile.get("preparation_goal") or "").strip()
         parts = [
             f"Role: {profile.get('role', '')}",
             f"Job description:\n{profile.get('job_description', '')}",
             f"Résumé:\n{profile.get('resume', '')}",
-            f"Candidate's goal: {profile.get('preparation_goal', '')}",
-            f"Recruiter focus: {profile.get('interview_focus') or 'general technical assessment'}",
-            f"Difficulty: {profile.get('difficulty', 'medium')}",
         ]
+        # On a recruiter link the stored goal is a copy of the recruiter focus, not something the candidate said.
+        if goal and goal != focus and not profile.get("interview_id"):
+            parts.append(f"Candidate's goal: {goal}")
+        parts += [f"Recruiter focus: {focus}", f"Difficulty: {profile.get('difficulty', 'medium')}"]
         brief = profile.get("agent_brief")
         if brief:
             parts.append(f"Your earlier reading of this candidate:\n{json.dumps(brief, ensure_ascii=False)}")
@@ -248,7 +257,7 @@ class InterviewAgent:
             return brief
 
         return self._json(
-            "You are the lead interviewer preparing for a technical mock interview. " + FAIRNESS,
+            "You are the lead interviewer preparing a technical interview for a recruiter. " + FAIRNESS,
             self._profile_context(profile) + "\n\nRead everything above and return JSON with keys: "
             '"summary" (two sentences on who the candidate is relative to this role), '
             '"key_requirements" (array of short strings: the job\'s most important skills and responsibilities), '
@@ -361,13 +370,15 @@ class InterviewAgent:
             }
 
         return self._json(
-            "You are a fair, specific technical-interview judge. Address the candidate as you. " + FAIRNESS,
+            "You are a fair, specific technical-interview judge writing notes for the recruiter. " + FOR_RECRUITER + FAIRNESS,
             self._profile_context(profile)
             + f"\n\nRound: {_SECTION_FOCUS.get(section, section)}\nQuestion: {question}\nCandidate's answer (may be a speech transcript): {answer}\n\n"
             "Score the answer from 0 to 100 against the question and the role: 90+ exceptional and specific, 70-89 solid, "
             "50-69 partially correct or vague, 30-49 weak, below 30 missing, wrong or off-topic. Speech-to-text slips are not errors. "
-            'Return JSON: {"score": integer, "strength": one sentence quoting what worked, '
-            '"improvement": one concrete sentence on what would raise the score, "role_relevance": one sentence on how well it maps to the job}.',
+            'Return JSON: {"score": integer, "strength": one sentence on what the candidate showed, quoting them where you can, '
+            '"improvement": one sentence on what they did not say that a strong answer would have included '
+            '(for example: Did not mention how the cache is invalidated; a strong answer would cover TTLs or write-through), '
+            '"role_relevance": one sentence on how well it maps to the job}.',
             validate,
             temperature=0.2,
         )
@@ -391,13 +402,14 @@ class InterviewAgent:
             }
 
         return self._json(
-            "You are a senior engineer reviewing a candidate's solution in a coding interview. Address the candidate as you. Be precise and brief.",
+            "You are a senior engineer reviewing a candidate's coding-interview solution for the hiring panel. " + FOR_RECRUITER + "Be precise and brief.",
             f"Problem: {problem.title}\n{problem.description}\nTarget: {problem.expected_time} time, {problem.expected_space} space.\n"
             f"Language: {language}\nTest results: {tests}\n\nCode:\n```\n{code[:12000]}\n```\n\n"
             "Work out the real time and space complexity from the code, not from its comments. "
             'Return JSON: {"time_complexity": big-O string, "space_complexity": big-O string, "approach": a short phrase, '
             '"meets_target": true if the time complexity is as good as the target, '
-            '"complexity_feedback": one or two sentences, "code_quality_feedback": one or two sentences on correctness, edge cases and readability}.',
+            '"complexity_feedback": one or two sentences on the complexity the candidate reached against the target, '
+            '"code_quality_feedback": one or two sentences on correctness, edge cases and readability, naming what a strong solution would have handled that this one did not}.',
             validate,
             temperature=0.1,
         )
@@ -412,7 +424,10 @@ class InterviewAgent:
                     "Not scored. Rate the answers they gave on this topic, including earlier follow-ups."
                 )
             feedback = answer["feedback"]
-            return f"[{section}] Q: {question}\nA: {answer['answer'][:1500]}\nScore {feedback['score']}: {feedback['improvement']}"
+            return (
+                f"[{section}] Q: {question}\nA: {answer['answer'][:1500]}\n"
+                f"Score {feedback['score']}. Showed: {feedback.get('strength', '')} Missing: {feedback.get('improvement', '')}"
+            )
 
         transcript = "\n\n".join(line(answer) for answer in answers) or "No spoken answers."
         coding = "No coding round."
@@ -422,24 +437,30 @@ class InterviewAgent:
 
         def validate(data: dict) -> dict:
             comm = data["communication_assessment"]
-            steps = _strings(data["next_steps"], 5)
-            if not steps:
-                raise ValueError("no next steps")
+            summary = str(data["summary"]).strip()
+            if not summary:
+                raise ValueError("empty summary")
             return {
-                "summary": str(data["summary"]).strip(),
+                "summary": summary,
                 "communication_assessment": {key: str(comm.get(key, "")).strip() for key in ("clarity", "answer_structure", "evidence")},
-                "next_steps": steps,
+                "strengths": _strings(data.get("strengths"), 4),
+                "gaps": _strings(data.get("gaps"), 5),
+                "follow_up_questions": _strings(data.get("follow_up_questions"), 4),
             }
 
         return self._json(
-            "You are the lead interviewer writing the candidate's practice-interview report. Be honest, warm and specific. Address the candidate as you. " + FAIRNESS,
+            "You are the lead interviewer writing the hiring panel's report on this candidate. Be honest, specific and evidence-based. "
+            + FOR_RECRUITER + FAIRNESS,
             self._profile_context(profile)
             + f"\n\nRound scores: {json.dumps(round_scores)}\nCoding round: {coding}\n\nSpoken answers:\n{transcript}\n\n"
-            'Return JSON: {"summary": three sentences on overall performance for this role, '
-            '"communication_assessment": {"clarity": sentence, "answer_structure": sentence, "evidence": sentence}, '
-            '"next_steps": 3 to 5 concrete practice actions based on the weakest answers}.',
+            'Return JSON: {"summary": three sentences for the recruiter on what the candidate demonstrated against this role\'s requirements, '
+            '"communication_assessment": {"clarity": sentence about the candidate, "answer_structure": sentence, "evidence": sentence}, '
+            '"strengths": 2 to 4 short points, each citing what the candidate actually said or wrote, '
+            '"gaps": 2 to 5 short points on what they did not show: what they left out, got wrong or could have said, '
+            "each naming what a strong answer would have included (for example: Did not say how they measured the speed-up; a strong answer would give before and after numbers), "
+            '"follow_up_questions": 2 to 4 questions a human interviewer could ask next to check those gaps}.',
             validate,
-            max_tokens=1200,
+            max_tokens=1400,
         )
 
     def transcribe_audio(self, audio_bytes: bytes) -> str:

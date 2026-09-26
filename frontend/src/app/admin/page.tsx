@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { InterviewerGate } from "@/components/admin/interviewer-gate";
 import { SiteHeader } from "@/components/site-header";
 import { PageError, PageLoading } from "@/components/page-state";
 import { LinkButton } from "@/components/ui/button";
 import { DifficultyBadge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth";
+import { useHydrated } from "@/lib/use-hydrated";
 import { useLoad } from "@/lib/use-load";
 
 function InterviewList() {
@@ -44,8 +45,7 @@ function InterviewList() {
 
 export default function AdminHome() {
   const user = useUser();
-  const [ready, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
+  const ready = useHydrated();
 
   return (
     <>
@@ -61,17 +61,7 @@ export default function AdminHome() {
           {user?.role === "admin" && <LinkButton href="/admin/new">New interview</LinkButton>}
         </div>
         {!ready && <PageLoading label="Loading interviews" />}
-        {ready && user?.role !== "admin" && (
-          <div className="mt-12 rounded-2xl border border-line bg-surface p-8">
-            <p className="font-display text-xl font-semibold text-ink">Interviewer account needed</p>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-ink-2">
-              Create an account and choose Interviewer. You will need the access code from the API environment.
-            </p>
-            <LinkButton href="/sign-in?next=/admin" className="mt-6">
-              Sign in
-            </LinkButton>
-          </div>
-        )}
+        {ready && user?.role !== "admin" && <InterviewerGate next="/admin" />}
         {ready && user?.role === "admin" && <InterviewList />}
       </main>
     </>

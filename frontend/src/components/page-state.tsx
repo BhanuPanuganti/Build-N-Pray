@@ -11,16 +11,21 @@ export function PageLoading({ label = "Loading" }: { label?: string }) {
   );
 }
 
-export function PageError({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function PageError({ message, onRetry, action }: { message: string; onRetry?: () => void; action?: React.ReactNode }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-24">
       <div className="max-w-md text-center">
         <CircleAlert className="mx-auto size-6 text-danger" />
         <p className="mt-3 text-[15px] text-ink">{message}</p>
-        {onRetry && (
-          <Button variant="secondary" size="sm" className="mt-5" onClick={onRetry}>
-            Try again
-          </Button>
+        {(onRetry || action) && (
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {action}
+            {onRetry && (
+              <Button variant="secondary" size="sm" onClick={onRetry}>
+                Try again
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>

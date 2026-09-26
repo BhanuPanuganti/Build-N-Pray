@@ -76,4 +76,6 @@ def run_problem(slug: str, request: RunCodeRequest):
 def submit_problem(slug: str, request: SubmitCodeRequest):
     """Practice submission against every test, including hidden ones."""
     problem = problem_or_404(slug)
+    if slug not in PROBLEMS:
+        raise HTTPException(403, "A problem written for an interview is submitted once, from the interview")
     return execute(lambda: {"mode": "submit", **judge(problem, request.language, request.code, list(problem.tests))})

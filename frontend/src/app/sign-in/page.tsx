@@ -15,7 +15,7 @@ type Mode = "sign-in" | "create";
 
 function safeNext(value: string | null, role: AccountRole): string {
   if (value && value.startsWith("/") && !value.startsWith("//")) return value;
-  return role === "admin" ? "/admin" : "/setup";
+  return role === "admin" ? "/admin" : "/";
 }
 
 function SignInForm() {
@@ -51,7 +51,7 @@ function SignInForm() {
       <form onSubmit={submit} className="mt-10 w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-lift">
         <h1 className="font-display text-2xl font-semibold text-ink">{mode === "create" ? "Create your account" : "Welcome back"}</h1>
         <p className="mt-1.5 text-sm text-ink-2">
-          {mode === "create" ? "Candidates take an interview link. Interviewers publish one." : "Your account keeps interview sessions under your email."}
+          {mode === "create" ? "Candidates take the interview link a recruiter sent. Interviewers publish one." : "Your account keeps interviews under your email."}
         </p>
         <div className="mt-6">
           <Segmented
@@ -82,7 +82,7 @@ function SignInForm() {
               </Field>
               <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoComplete="name" />}</Field>
               {accountRole === "admin" && (
-                <Field label="Interviewer access code" hint="Set ADMIN_ACCESS_CODE in the API environment.">
+                <Field label="Interviewer access code" hint="Ask whoever runs this BNB server for the code.">
                   {(id) => <Input id={id} value={accessCode} onChange={(e) => setAccessCode(e.target.value)} required autoComplete="off" />}
                 </Field>
               )}

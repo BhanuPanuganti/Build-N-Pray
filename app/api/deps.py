@@ -28,6 +28,14 @@ def require_user(authorization: str | None = Header(default=None)) -> dict:
     return user_from_authorization(authorization)
 
 
+def optional_user(authorization: str | None) -> dict | None:
+    """The signed-in user, or None for an anonymous or expired token."""
+    try:
+        return user_from_authorization(authorization)
+    except HTTPException:
+        return None
+
+
 def require_admin(authorization: str | None = Header(default=None)) -> dict:
     user = user_from_authorization(authorization)
     if user["role"] != "admin":

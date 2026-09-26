@@ -22,8 +22,8 @@ FALLBACK_CLOSING = "That covers everything I wanted to ask in this round. Thanks
 SKIPPED_ASSESSMENT = {
     "score": None,
     "signal": "skipped",
-    "strength": "You skipped this follow-up.",
-    "improvement": "This question was not scored. The answers you gave on this topic still count.",
+    "strength": "The candidate skipped this follow-up.",
+    "improvement": "Not scored. Their other answers on this topic still count.",
     "role_relevance": "",
 }
 
@@ -157,13 +157,20 @@ def _apply_move(state: dict, move: str, result: dict) -> None:
     elif move == "next_topic":
         _move_to(state, next(i for i, t in enumerate(state["topics"]) if t["status"] == "upcoming"))
     elif move == "probe_mention":
-        name = result["new_topic"] or (result["mentions"][0] if result["mentions"] else "Something you mentioned")
-        state["topics"].insert(state["current"] + 1, {
-            "skill": name, "why": "The candidate brought this up.", "angle": "", "status": "upcoming",
-            "origin": "mention", "level": None, "note": "",
-        })
-        state["probes"] += 1
-        _move_to(state, state["current"] + 1)
+        name = result["new_topic"] or (result["mentions"][0] if result["mentions"] else "Something they mentioned")
+        known = next((i for i, t in enumerate(state["topics"]) if t["skill"].strip().lower() == name.strip().lower()), None)
+        if known is None:
+            state["topics"].insert(state["current"] + 1, {
+                "skill": name, "why": "The candidate brought this up.", "angle": "", "status": "upcoming",
+                "origin": "mention", "level": None, "note": "",
+            })
+            state["probes"] += 1
+            _move_to(state, state["current"] + 1)
+        elif known == state["current"]:
+            # Probing the topic already under discussion is a follow-up, not a second copy of it.
+            state["follow_ups"] += 1
+        else:
+            _move_to(state, known)
 
 
 def _close(session, section: str, state: dict) -> None:

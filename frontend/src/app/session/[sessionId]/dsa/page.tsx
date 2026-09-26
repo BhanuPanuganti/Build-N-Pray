@@ -12,36 +12,47 @@ import { api } from "@/lib/api";
 import { cx, formatClock } from "@/lib/format";
 import { useCountdown } from "@/lib/use-countdown";
 import { useLoad } from "@/lib/use-load";
-import type { DsaEvaluation } from "@/lib/types";
+import type { DsaSubmitResult } from "@/lib/types";
 
 export default function DsaRoundPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const proctor = useSessionProctor();
+  const { data: summary, error: summaryError } = useLoad(() => api.session(sessionId), sessionId);
+  const alreadyDone = summary?.sections.dsa === "completed";
+  const canOpen = proctor.running || alreadyDone;
   const { data, error, reload } = useLoad(
     () =>
-      proctor.running
+      canOpen
         ? Promise.all([api.startDsa(sessionId), api.languages()]).then(([dsa, languages]) => ({ dsa, languages, deadline: Date.now() + dsa.ends_in_seconds * 1000 }))
         : Promise.resolve(null),
-    proctor.running ? sessionId : "need-devices",
+    canOpen ? sessionId : "need-devices",
   );
-  const [evaluation, setEvaluation] = useState<DsaEvaluation | null>(null);
+  const [result, setResult] = useState<DsaSubmitResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const submitted = Boolean(evaluation) || Boolean(data?.dsa.submitted);
+  const submitted = Boolean(result) || Boolean(data?.dsa.submitted);
   const secondsLeft = useCountdown(data && !submitted ? data.deadline : null);
   const expired = Boolean(data) && !submitted && secondsLeft === 0;
 
   const submit = useCallback(
     async (language: string, code: string) => {
-      const result = await api.submitDsa(sessionId, language, code);
-      setEvaluation(result.evaluation);
+      const submission = await api.submitDsa(sessionId, language, code);
+      setResult(submission);
       setDialogOpen(true);
-      return result;
+      return submission;
     },
     [sessionId],
   );
 
-  if (!proctor.running) {
+  if (!summary && !summaryError) {
+    return (
+      <div className="flex min-h-dvh">
+        <PageLoading label="Opening the coding round" />
+      </div>
+    );
+  }
+
+  if (!canOpen) {
     return (
       <main className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center px-6 py-16">
         <h1 className="font-display text-3xl font-semibold text-ink">Enable the camera and microphone</h1>
@@ -71,9 +82,10 @@ export default function DsaRoundPage() {
     );
   }
 
-  const shownEvaluation = evaluation ?? data.dsa.evaluation ?? null;
+  const shownEvaluation = result?.evaluation ?? data.dsa.evaluation ?? null;
+  const tests = result ? { passed: result.passed, total: result.total } : null;
   const headerExtras = submitted ? (
-    <button onClick={() => setDialogOpen(true)} className="rounded-full" aria-label="Show your result">
+    <button onClick={() => setDialogOpen(true)} className="rounded-full" aria-label="Show the submission">
       <Badge tone="accent">Submitted{shownEvaluation ? `, score ${shownEvaluation.score}` : ""}</Badge>
     </button>
   ) : (
@@ -103,8 +115,8 @@ export default function DsaRoundPage() {
         locked={submitted}
         autoSubmit={expired}
       />
-      {dialogOpen && shownEvaluation && (
-        <DsaResultDialog evaluation={shownEvaluation} sessionId={sessionId} onClose={() => setDialogOpen(false)} />
+      {dialogOpen && submitted && (
+        <DsaResultDialog evaluation={shownEvaluation} tests={tests} sessionId={sessionId} onClose={() => setDialogOpen(false)} />
       )}
     </>
   );

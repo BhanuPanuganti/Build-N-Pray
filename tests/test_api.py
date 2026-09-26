@@ -6,6 +6,14 @@ client = TestClient(app)
 PAYLOAD = {"candidate_name": "Ada", "role": "Engineer", "job_description": "Build Python API services and collaborate with a team.", "resume": "Built two Python web projects.", "preparation_goal": "Practice concise answers.", "difficulty": "medium"}
 
 
+def test_health_reports_storage():
+    response = client.get("/health")
+    body = response.json()
+    assert body["mongodb"] in {"connected", "memory", "unavailable"}
+    assert body["ok"] is (body["mongodb"] != "unavailable")
+    assert response.status_code == (200 if body["ok"] else 503)
+
+
 def test_full_interview_flow():
     started = client.post("/api/sessions", json=PAYLOAD)
     assert started.status_code == 200
@@ -22,7 +30,8 @@ def test_full_interview_flow():
     assert report.status_code == 200
     body = report.json()
     assert body["dsa_result"]["submitted"] is True
-    assert body["summary"] == "Solid practice run." and body["next_steps"]
+    assert body["summary"].startswith("The candidate") and body["gaps"] and body["follow_up_questions"]
+    assert "next_steps" not in body
     assert body["overall_score"] == body["round_scores"]["dsa"] == submitted.json()["evaluation"]["score"]
 
 

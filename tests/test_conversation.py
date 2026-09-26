@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import conversation, interviewer
 from app.services.agent import AgentUnavailable, _rate_limit_wait, agent
+from app.services.session_store import store
 
 client = TestClient(app)
 PAYLOAD = {
@@ -67,6 +68,17 @@ def test_interviewer_picks_up_what_the_candidate_mentions():
     assert probed["topic"] == "Object-oriented design"
     progress = client.get(f"/api/sessions/{session_id}").json()["voice_progress"]
     assert progress["topic"] == "Object-oriented design" and progress["question_number"] == 2
+
+
+def test_probing_the_same_mention_twice_does_not_add_a_second_topic():
+    session_id = _session()
+    client.post(f"/api/sessions/{session_id}/section", json={"section": "fundamentals"})
+    _answer(session_id, "Mostly I write Java services at work.")
+    _answer(session_id, "Java again, mostly Spring.")
+    state = store.get(session_id).conversation["fundamentals"]
+    names = [topic["skill"] for topic in state["topics"]]
+    assert names.count("Object-oriented design") == 1
+    assert state["follow_ups"] == 1
 
 
 def test_refresh_resumes_mid_conversation_with_history():

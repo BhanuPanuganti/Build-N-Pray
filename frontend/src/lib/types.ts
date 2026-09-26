@@ -100,7 +100,7 @@ export type DsaEvaluation = {
   submitted_at: string;
 };
 
-export type DsaSubmitResult = Omit<JudgeResult, "mode"> & { evaluation: DsaEvaluation };
+export type DsaSubmitResult = Omit<JudgeResult, "mode"> & { evaluation: DsaEvaluation | null };
 
 export type DsaStart = {
   problem_slug: string;
@@ -138,6 +138,8 @@ export type SessionSummary = {
   disqualified: boolean;
   warnings_log: { type: string; details: string; observed_at?: string }[];
   round_scores: Partial<Record<SectionId | "general", number>>;
+  /** Opened from a recruiter's link: scores and the report go to the recruiter, not the candidate. */
+  recruiter_session: boolean;
   created_at: string;
 };
 
@@ -178,7 +180,7 @@ export type VoiceQuestion = {
 };
 
 export type AnswerResult = {
-  feedback: AnswerFeedback;
+  feedback: AnswerFeedback | null;
   next_question: string | null;
   question_number: number;
   total_questions: number;
@@ -199,17 +201,26 @@ export type RoundVerdict = {
 export type ProctorEvent = { type: string; details: string; observed_at?: string; source?: string };
 
 export type Report = {
+  candidate_name: string;
+  candidate_email: string;
+  role: string;
+  /** Set when the attempt came from a published link; the report then belongs to that recruiter. */
+  interview_id: string | null;
+  started_at: string;
+  sections: Record<SectionId, SectionStatus>;
   overall_score: number;
   summary: string;
   section_summaries: Record<string, { answer_count: number; average_score: number; answers: { section: string; question: string; answer: string; skipped?: boolean; feedback: AnswerFeedback; topic?: string; kind?: InterviewerMove | "opening" }[] }>;
   communication_assessment: Record<string, string>;
-  next_steps: string[];
+  strengths: string[];
+  gaps: string[];
+  follow_up_questions: string[];
   integrity_observations: ProctorEvent[];
   warnings: number;
   disqualified: boolean;
   round_scores: Partial<Record<SectionId | "general", number>>;
   round_verdicts?: Partial<Record<VoiceSectionId, RoundVerdict>>;
-  dsa_result: (SessionSummary["dsa"] & { late?: boolean; status?: string }) | null;
+  dsa_result: (SessionSummary["dsa"] & { late?: boolean; status?: string; code?: string }) | null;
 };
 
 export type InterviewDraft = {
@@ -223,13 +234,18 @@ export type InterviewDraft = {
   fundamentals_question_count: number;
 };
 
-export type PublicInterview = Omit<InterviewDraft, "job_description"> & {
+export type PublicInterview = Omit<InterviewDraft, "job_description" | "interview_focus"> & {
   token: string;
   job_description: string;
-  summary: string;
+  /** The signed-in candidate's attempt at this link, when they already started one. */
+  my_session_id?: string | null;
+  /** False when the browser sent a sign-in the server no longer accepts. */
+  signed_in?: boolean;
 };
 
 export type InterviewDetail = PublicInterview & {
+  interview_focus: string;
+  summary: string;
   id: string;
   path: string;
   created_at: string;

@@ -1,27 +1,26 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CodingPreview } from "@/components/admin/coding-preview";
+import { InterviewerGate } from "@/components/admin/interviewer-gate";
 import { Scoreboard } from "@/components/admin/scoreboard";
 import { PageError, PageLoading } from "@/components/page-state";
 import { SiteHeader } from "@/components/site-header";
 import { DifficultyBadge } from "@/components/ui/badge";
-import { Button, LinkButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth";
+import { useHydrated } from "@/lib/use-hydrated";
 import { useLoad } from "@/lib/use-load";
 
 function Board({ id }: { id: string }) {
   const interview = useLoad(() => api.interview(id), id);
   const attempts = useLoad(() => api.attempts(id), `${id}:attempts`);
-  const [copied, setCopied] = useState(false);
-  const [link, setLink] = useState("");
+  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const path = interview.data?.path ?? "";
-
-  useEffect(() => {
-    if (path) setLink(`${window.location.origin}${path}`);
-  }, [path]);
+  // Board renders only after hydration, so window is available.
+  const link = path ? `${window.location.origin}${path}` : "";
 
   if (interview.error && !interview.data) return <PageError message={interview.error} onRetry={interview.reload} />;
   if (!interview.data) return <PageLoading label="Loading the scoreboard" />;
@@ -29,8 +28,13 @@ function Board({ id }: { id: string }) {
   const average = scored.length ? Math.round(scored.reduce((sum, score) => sum + score, 0) / scored.length) : null;
 
   async function copy() {
-    await navigator.clipboard.writeText(link);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied("copied");
+    } catch {
+      setCopied("failed");
+    }
+    window.setTimeout(() => setCopied("idle"), 2000);
   }
 
   return (
@@ -46,7 +50,9 @@ function Board({ id }: { id: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={copy}>{copied ? "Copied" : "Copy link"}</Button>
+          <Button variant="secondary" onClick={copy}>
+            {copied === "copied" ? "Copied" : copied === "failed" ? "Copy the link below" : "Copy link"}
+          </Button>
           <Button variant="ghost" onClick={() => { interview.reload(); attempts.reload(); }}>Refresh</Button>
         </div>
       </div>
@@ -67,22 +73,14 @@ function Board({ id }: { id: string }) {
 export default function InterviewBoardPage() {
   const { id } = useParams<{ id: string }>();
   const user = useUser();
-  const [ready, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
+  const ready = useHydrated();
 
   return (
     <>
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 pb-24 pt-14 sm:px-8">
         {!ready && <PageLoading label="Loading the scoreboard" />}
-        {ready && user?.role !== "admin" && (
-          <div>
-            <p className="font-display text-2xl font-semibold text-ink">Interviewer account needed</p>
-            <LinkButton href={`/sign-in?next=/admin/interviews/${id}`} className="mt-6">
-              Sign in
-            </LinkButton>
-          </div>
-        )}
+        {ready && user?.role !== "admin" && <InterviewerGate next={`/admin/interviews/${id}`} />}
         {ready && user?.role === "admin" && <Board id={id} />}
       </main>
     </>

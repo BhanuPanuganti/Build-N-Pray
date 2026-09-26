@@ -6,7 +6,7 @@ export function CodingPreview({ problem }: { problem: Problem }) {
     <section className="mt-12 border-t border-line pt-10">
       <h2 className="font-display text-xl font-semibold text-ink">Coding problem the agent wrote</h2>
       <p className="mt-1 text-sm text-ink-3">
-        Students see this after they start the round. {hidden} hidden {hidden === 1 ? "test stays" : "tests stay"} on the server.
+        Candidates see this after they start the round. {hidden} hidden {hidden === 1 ? "test stays" : "tests stay"} on the server.
       </p>
       <h3 className="mt-6 font-display text-lg font-semibold text-ink">{problem.title}</h3>
       <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-ink-2">{problem.description}</p>

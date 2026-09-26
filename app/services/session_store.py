@@ -80,6 +80,7 @@ def session_from_saved(data: dict) -> Session:
         sections=dict(sections),
         active_section=data.get("active_section"),
         conversation=dict(data.get("conversation") or {}),
+        report_cache=data.get("report_cache"),
         created_at=data.get("created_at") or datetime.now(timezone.utc).isoformat(),
     )
 

@@ -20,10 +20,10 @@ const bricolage = Bricolage_Grotesque({
 
 export const metadata: Metadata = {
   title: {
-    default: "BNB Interview Coach",
-    template: "%s · BNB Interview Coach",
+    default: "BNB Interviews",
+    template: "%s · BNB Interviews",
   },
-  description: "Rehearse technical interviews: a timed coding round, project questions from your résumé, and core fundamentals.",
+  description: "Send candidates a technical interview: a timed coding round, spoken project and fundamentals rounds, and a written report for the recruiter.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

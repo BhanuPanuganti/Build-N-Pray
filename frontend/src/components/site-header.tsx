@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { setUser, useUser } from "@/lib/auth";
 import { cx } from "@/lib/format";
@@ -22,20 +22,25 @@ export function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5 font-display text-[17px] font-semibold text-ink">
       <BrandMark className="size-7" />
-      BNB <span className="font-normal text-ink-3">Interview Coach</span>
+      BNB <span className="font-normal text-ink-3">Interviews</span>
     </Link>
   );
 }
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useUser();
+  const signOut = () => {
+    setUser(null);
+    router.replace("/");
+  };
   const links = user?.role === "admin" ? [{ href: "/admin", label: "Interviews" }] : [];
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-5 sm:px-8">
+      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-5 sm:gap-8 sm:px-8">
         <Brand />
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="flex items-center gap-1">
           {links.map((item) => (
             <Link
               key={item.href}
@@ -56,7 +61,7 @@ export function SiteHeader() {
               <span className="grid size-8 place-items-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent" title={user.email}>
                 {user.name.slice(0, 1).toUpperCase()}
               </span>
-              <button onClick={() => setUser(null)} className="rounded-md p-2 text-ink-3 hover:bg-surface-2 hover:text-ink" aria-label="Sign out">
+              <button onClick={signOut} className="rounded-md p-2 text-ink-3 hover:bg-surface-2 hover:text-ink" aria-label="Sign out">
                 <LogOut className="size-4" />
               </button>
             </div>

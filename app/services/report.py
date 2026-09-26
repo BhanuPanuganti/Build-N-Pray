@@ -1,13 +1,16 @@
-"""Final interview report: numbers from the session, words from the interview agent."""
+"""Final interview report for the recruiter: numbers from the session, words from the interview agent."""
 from __future__ import annotations
 
 from app.services.agent import agent
 from app.services.conversation import verdicts
 
+# Bump when the written report changes shape so older cached reports are rewritten.
+REPORT_VERSION = 2
+
 
 def _cache_key(session) -> str:
     dsa_done = bool(session.dsa and session.dsa.get("submitted"))
-    return f"{len(session.answers)}|{dsa_done}|{sorted(session.round_scores.items())}"
+    return f"v{REPORT_VERSION}|{len(session.answers)}|{dsa_done}|{sorted(session.round_scores.items())}"
 
 
 def _scored(answers: list[dict]) -> list[int]:
@@ -25,9 +28,11 @@ def _overall_score(session) -> int:
 def _written_feedback(session) -> dict:
     if not session.answers and not (session.dsa and session.dsa.get("evaluation")):
         return {
-            "summary": "No round has been completed yet, so there is nothing to assess.",
+            "summary": "The candidate has not completed a round yet, so there is nothing to assess.",
             "communication_assessment": {},
-            "next_steps": ["Complete at least one round to get feedback."],
+            "strengths": [],
+            "gaps": [],
+            "follow_up_questions": [],
         }
     key = _cache_key(session)
     cached = session.report_cache
@@ -50,7 +55,14 @@ def build_report(session) -> dict:
             "average_score": round(sum(scores) / len(scores)) if scores else 0,
             "answers": items,
         }
+    profile = session.profile
     return {
+        "candidate_name": profile.get("candidate_name") or "Candidate",
+        "candidate_email": profile.get("candidate_email") or "",
+        "role": profile.get("role") or "",
+        "interview_id": profile.get("interview_id"),
+        "started_at": session.created_at,
+        "sections": session.sections,
         "overall_score": _overall_score(session),
         **_written_feedback(session),
         "section_summaries": section_summaries,

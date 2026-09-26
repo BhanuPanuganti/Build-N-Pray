@@ -27,6 +27,7 @@ function detail(summary: SessionSummary, section: SectionId): string | null {
   const status = summary.sections[section];
   const score = summary.round_scores[section];
   if (status === "completed" && score !== undefined) return `Score ${score}`;
+  if (status === "completed" && summary.recruiter_session) return "Answers saved";
   if (section === "dsa" && summary.dsa && !summary.dsa.submitted) return `${formatClock(summary.dsa.seconds_left)} left on ${summary.dsa.title}`;
   if (section === "dsa" && status === "not_started") return `${difficultyLabel[summary.difficulty]}, ${summary.dsa_duration_minutes} minutes`;
   if (summary.voice_progress?.section === section) return `In progress: talking about ${summary.voice_progress.topic}`;
@@ -61,10 +62,12 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
     <main className="mx-auto w-full max-w-3xl px-6 pb-20 pt-6 lg:px-10">
       <div className="flex items-center justify-between">
         <Brand />
-        <Link href={`/report/${sessionId}`} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink">
-          <FileText className="size-4" />
-          Report so far
-        </Link>
+        {!summary.recruiter_session && (
+          <Link href={`/report/${sessionId}`} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-2 hover:text-ink">
+            <FileText className="size-4" />
+            Report so far
+          </Link>
+        )}
       </div>
 
       <div className="mt-12">
@@ -83,7 +86,8 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
       {summary.disqualified && (
         <div className="mt-8 flex gap-3 rounded-xl bg-danger-soft p-4 text-sm text-danger">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          This session was locked after {summary.warning_limit} monitoring warnings. The report lists what was observed.
+          This session was locked after {summary.warning_limit} monitoring warnings.{" "}
+          {summary.recruiter_session ? "The recruiter will see what was observed." : "The report lists what was observed."}
         </div>
       )}
       {!summary.disqualified && summary.warnings > 0 && (
@@ -109,7 +113,7 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
                 {note && <p className="mt-2 text-[13px] font-medium text-ink">{note}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2 sm:pt-0.5">
-                {open && status === "not_started" && (
+                {open && status === "not_started" && !summary.recruiter_session && (
                   <Button variant="ghost" size="sm" onClick={() => skip(section.id)} loading={skipping === section.id}>
                     Skip
                   </Button>
@@ -136,11 +140,17 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
       </ol>
       {actionError && <p className="mt-3 text-[13px] text-danger">{actionError}</p>}
 
-      {allDone && (
+      {allDone && summary.recruiter_session && (
+        <div className="mt-8 rounded-2xl bg-accent-soft px-6 py-5">
+          <p className="font-display text-lg font-semibold text-ink">Interview complete</p>
+          <p className="mt-0.5 text-sm text-ink-2">Your answers and code went to the recruiter who shared this link. You can close this tab.</p>
+        </div>
+      )}
+      {allDone && !summary.recruiter_session && (
         <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-accent-soft px-6 py-5">
           <div>
-            <p className="font-display text-lg font-semibold text-ink">Your report is ready</p>
-            <p className="mt-0.5 text-sm text-ink-2">Scores, feedback on every answer, and what the monitoring observed.</p>
+            <p className="font-display text-lg font-semibold text-ink">The report is ready</p>
+            <p className="mt-0.5 text-sm text-ink-2">Scores, notes on every answer, and what the monitoring observed.</p>
           </div>
           <LinkButton href={`/report/${sessionId}`}>Open the report</LinkButton>
         </div>

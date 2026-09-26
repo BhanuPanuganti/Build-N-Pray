@@ -20,7 +20,7 @@ export function turnLabel(kind: InterviewerMove | "opening" | undefined): string
     case "follow_up":
       return "Follow-up";
     case "probe_mention":
-      return "Picked up from your answer";
+      return "Picked up from their answer";
     case "next_topic":
       return "New topic";
     case "opening":
@@ -38,7 +38,7 @@ export function RoundVerdictCard({ verdict }: { verdict: RoundVerdict }) {
   if (verdict.skills.length === 0) {
     return (
       <p className="mt-4 text-[13px] text-ink-3">
-        The interviewer could not write per-skill ratings for this round, so its score is the average of your answers.
+        The interviewer could not write per-skill ratings for this round, so its score is the average of the candidate&apos;s answers.
       </p>
     );
   }
@@ -46,8 +46,8 @@ export function RoundVerdictCard({ verdict }: { verdict: RoundVerdict }) {
     <div className="mt-4 rounded-xl border border-line bg-surface p-5">
       <p className="text-[15px] leading-relaxed text-ink-2">{verdict.summary}</p>
       <ul className="mt-4 divide-y divide-line">
-        {verdict.skills.map((skill) => (
-          <li key={skill.skill} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:gap-6">
+        {verdict.skills.map((skill, index) => (
+          <li key={`${index}-${skill.skill}`} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:gap-6">
             <div>
               <p className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-ink">
                 {skill.skill}

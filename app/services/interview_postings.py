@@ -28,13 +28,11 @@ def candidate_view(doc: dict) -> dict:
         "token": doc["token"],
         "role": doc["role"],
         "job_description": normalize_document_text(doc["job_description"]),
-        "interview_focus": doc["interview_focus"],
         "difficulty": doc["difficulty"],
         "dsa_enabled": doc["dsa_enabled"],
         "dsa_duration_minutes": doc["dsa_duration_minutes"],
         "project_question_count": doc["project_question_count"],
         "fundamentals_question_count": doc["fundamentals_question_count"],
-        "summary": _summary(doc),
     }
 
 
@@ -43,6 +41,9 @@ def admin_view(doc: dict, attempt_count: int) -> dict:
     problem = remember(problem_from_dict(raw)) if raw else None
     return {
         **candidate_view(doc),
+        # The recruiter's steer and the agent's brief say how the candidate will be probed.
+        "interview_focus": doc["interview_focus"],
+        "summary": _summary(doc),
         "id": doc["id"],
         "path": f"/i/{doc['token']}",
         "created_at": doc["created_at"],
@@ -93,9 +94,15 @@ def prepare_interview(admin: dict, spec: dict) -> dict:
 
 
 def start_attempt(user: dict, token: str, resume: str):
+    """One attempt per candidate per interview. Joining again returns the attempt already started."""
     interview = repository.interview_by_token(token)
     if interview is None:
         return None
+    earlier = repository.attempt_for(interview["id"], user["email"])
+    if earlier:
+        found = store.get(earlier["id"])
+        if found is not None:
+            return found
     problem = remember(problem_from_dict(interview["coding_problem"])) if interview.get("coding_problem") else None
     profile = {
         "candidate_name": user["name"],

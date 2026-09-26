@@ -9,20 +9,25 @@ export function DisqualifiedPage({
   warnings,
   limit,
   events,
+  recruiterSession,
 }: {
   sessionId: string;
   warnings: number;
   limit: number;
   events: ListedWarning[];
+  recruiterSession: boolean;
 }) {
   const count = warnings || events.length;
   return (
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-col px-6 pb-20 pt-8">
       <Brand />
-      <p className="mt-16 text-sm font-medium text-danger">Interview terminated</p>
-      <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight text-ink">You are disqualified</h1>
+      <p className="mt-16 text-sm font-medium text-danger">Interview stopped</p>
+      <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight text-ink">This interview has ended</h1>
       <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-2">
-        This interview has ended. Monitoring recorded {count} of {limit} warnings, so the session is locked and cannot continue.
+        Monitoring recorded {count} of {limit} warnings, so the session is locked and cannot continue.{" "}
+        {recruiterSession
+          ? "The recruiter will see these observations and the answers you gave, and decides what happens next."
+          : "These observations are for a person to review; none of them is proof of misconduct."}
       </p>
       <ol className="mt-10 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
         {events.map((event, index) => {
@@ -40,7 +45,7 @@ export function DisqualifiedPage({
       </ol>
       <div className="mt-8 flex flex-wrap gap-3">
         <LinkButton href="/" variant="secondary">Back home</LinkButton>
-        <LinkButton href={`/report/${sessionId}`}>View report</LinkButton>
+        {!recruiterSession && <LinkButton href={`/report/${sessionId}`}>View report</LinkButton>}
       </div>
     </main>
   );
