@@ -105,7 +105,7 @@ async function audioRequest(path: string, signal?: AbortSignal): Promise<Blob> {
   return audio;
 }
 
-const LISTEN_ORIGIN = API_ORIGIN || (typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:8000");
+const LISTEN_ORIGIN = API_ORIGIN || "http://127.0.0.1:8000";
 
 export function listenSocketUrl(sessionId: string): string {
   const origin = LISTEN_ORIGIN.replace(/\/$/, "").replace(/^http/i, "ws");
