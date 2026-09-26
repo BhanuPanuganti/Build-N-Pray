@@ -261,6 +261,24 @@ def skip_section(session_id: str, section: str, authorization: str | None = Head
     return session_summary(session)
 
 
+@router.post("/sessions/{session_id}/end-early")
+def end_early(session_id: str, authorization: str | None = Header(default=None)):
+    """Candidate option to end the entire interview early."""
+    session = candidate_session(session_id, authorization)
+    with _lock_for(session_id):
+        if session.active_section in CONVERSATIONAL_SECTIONS:
+            state = session.conversation[session.active_section]
+            if "closing" not in state:
+                state["closing"] = conversation.FALLBACK_CLOSING
+                conversation._close(session, session.active_section, state)
+        for section in SECTIONS:
+            if session.sections.get(section) in {"not_started", "in_progress"}:
+                session.sections[section] = "skipped"
+        session.active_section = None
+        repository.save_session(session)
+    return session_summary(session)
+
+
 @router.post("/sessions/{session_id}/transcribe")
 async def transcribe_answer(session_id: str, audio: UploadFile, authorization: str | None = Header(default=None)):
     candidate_session(session_id, authorization)

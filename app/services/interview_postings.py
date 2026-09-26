@@ -124,8 +124,9 @@ def start_attempt(user: dict, token: str, resume: str):
     if problem:
         profile["prepared_problem_slug"] = problem.slug
         profile["coding_problem_title"] = problem.title
-    planned = interview_graph.invoke({"profile": profile, "brief": {}, "questions": []})
-    profile["agent_brief"] = planned["brief"]
-    session = store.create(profile, planned["questions"])
+    brief = agent.read_profile(profile)
+    questions = agent.opening_questions({**profile, "agent_brief": brief})
+    profile["agent_brief"] = brief
+    session = store.create(profile, questions)
     repository.save_session(session)
     return session

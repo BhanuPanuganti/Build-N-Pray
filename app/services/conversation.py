@@ -49,15 +49,18 @@ def _current_skill(state: dict) -> str:
     return state["topics"][state["current"]]["skill"]
 
 
-def _earlier_mentions(session, section: str) -> list[str]:
+def _earlier_coverage(session, section: str) -> list[str]:
     seen: list[str] = []
     for name, state in session.conversation.items():
         if name == section:
             continue
+        for topic in state["topics"]:
+            if topic["status"] in {"covered", "current"} and topic["skill"] not in seen:
+                seen.append(topic["skill"])
         for mention in state["mentions"]:
             if mention not in seen:
                 seen.append(mention)
-    return seen[:8]
+    return seen[:12]
 
 
 def _activate(session, section: str, state: dict) -> dict:
@@ -82,7 +85,7 @@ def start(session, section: str) -> dict:
         return _activate(session, section, state)
 
     count = int(session.profile.get(f"{section}_question_count", 3))
-    plan = interviewer.plan_round(session.profile, section, count, _earlier_mentions(session, section))
+    plan = interviewer.plan_round(session.profile, section, count, _earlier_coverage(session, section))
     topics = [{**topic, "status": "upcoming", "origin": "plan", "level": None, "note": ""} for topic in plan["topics"]]
     topics[0]["status"] = "current"
     state = {

@@ -228,18 +228,21 @@ class InterviewAgent:
     def _profile_context(profile: dict) -> str:
         focus = profile.get("interview_focus") or "general technical assessment"
         goal = str(profile.get("preparation_goal") or "").strip()
+        brief = profile.get("agent_brief")
         parts = [
             f"Role: {profile.get('role', '')}",
             f"Job description:\n{profile.get('job_description', '')}",
-            f"Résumé:\n{profile.get('resume', '')}",
         ]
+        # Once the agent has read the résumé into a brief, subsequent prompts
+        # use the brief instead of the full résumé to cut token count.
+        if brief:
+            parts.append(f"Your earlier reading of this candidate:\n{json.dumps(brief, ensure_ascii=False)}")
+        else:
+            parts.append(f"Résumé:\n{profile.get('resume', '')}")
         # On a recruiter link the stored goal is a copy of the recruiter focus, not something the candidate said.
         if goal and goal != focus and not profile.get("interview_id"):
             parts.append(f"Candidate's goal: {goal}")
         parts += [f"Recruiter focus: {focus}", f"Difficulty: {profile.get('difficulty', 'medium')}"]
-        brief = profile.get("agent_brief")
-        if brief:
-            parts.append(f"Your earlier reading of this candidate:\n{json.dumps(brief, ensure_ascii=False)}")
         posting = profile.get("interviewer_brief")
         if posting:
             parts.append(
@@ -340,7 +343,7 @@ class InterviewAgent:
                 text = self._chat(
                     "You are a senior engineer writing a fair coding-interview problem. Reply with a single JSON object and nothing else.",
                     prompt,
-                    max_tokens=4096,
+                    max_tokens=6000,
                     temperature=0.4,
                     require_json=True,
                 )

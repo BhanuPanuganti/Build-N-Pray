@@ -8,7 +8,7 @@ export function ProctorMonitor({ proctor, serverWarnings = 0 }: { proctor: Retur
   const warnings = Math.max(liveWarnings, serverWarnings);
 
   return (
-    <aside className="flex flex-col gap-4 border-line bg-surface p-4 lg:border-l">
+    <aside className="flex flex-col gap-4 border-line bg-surface p-4 lg:sticky lg:top-4 lg:border-l">
       <div className="pointer-events-none fixed inset-x-0 top-4 z-[80] flex flex-col items-center gap-2 px-4">
         {toasts.map((toast) => (
           <div key={toast.id} role="alert" className="pointer-events-auto w-full max-w-sm rounded-xl bg-danger px-4 py-3 text-white shadow-float">

@@ -28,6 +28,16 @@ export function SessionFrame({ sessionId, children }: { sessionId: string; child
     reload();
   }, [proctor.locked, reload]);
 
+  useEffect(() => {
+    function block(e: Event) {
+      e.preventDefault();
+    }
+    document.addEventListener("contextmenu", block);
+    return () => {
+      document.removeEventListener("contextmenu", block);
+    };
+  }, []);
+
   if (error && !summary) {
     return (
       <main className="flex min-h-dvh flex-col">
@@ -61,7 +71,7 @@ export function SessionFrame({ sessionId, children }: { sessionId: string; child
 
   return (
     <SessionProctorContext.Provider value={proctor}>
-      <div className="flex min-h-full flex-col-reverse lg:grid lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="flex min-h-full flex-col-reverse lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <div className="min-w-0">{children}</div>
         <ProctorMonitor proctor={proctor} serverWarnings={summary?.warnings ?? 0} />
       </div>

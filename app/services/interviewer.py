@@ -70,7 +70,7 @@ def _candidate_line(turn: dict) -> str:
     return str(turn.get("answer") or "")[:1500]
 
 
-def _transcript(state: dict, limit: int = 14) -> str:
+def _transcript(state: dict, limit: int = 8) -> str:
     turns = [t for t in state["turns"] if t.get("answer") is not None][-limit:]
     if not turns:
         return "(nothing yet)"
@@ -79,8 +79,13 @@ def _transcript(state: dict, limit: int = 14) -> str:
     )
 
 
-def plan_round(profile: dict, section: str, topic_count: int, earlier_mentions: list[str]) -> dict:
-    """Choose the skills to verify and write the opening line."""
+def plan_round(profile: dict, section: str, topic_count: int, earlier_coverage: list[str]) -> dict:
+    """Choose the skills to verify and write the opening line.
+
+    The LLM picks the topics; the opening line is a hardcoded template
+    that inserts the first topic's name. This saves one output field
+    from the LLM and makes the round start instant.
+    """
 
     def validate(data: dict) -> dict:
         topics = []
@@ -90,34 +95,35 @@ def plan_round(profile: dict, section: str, topic_count: int, earlier_mentions: 
             skill = str(raw.get("skill", "")).strip()
             if skill:
                 topics.append({"skill": skill, "why": str(raw.get("why", "")).strip(), "angle": str(raw.get("angle", "")).strip()})
-        opening = str(data["opening"]).strip()
-        if not topics or not opening:
-            raise ValueError("a plan needs topics and an opening line")
-        return {"topics": topics[:topic_count], "opening": opening}
+        if not topics:
+            raise ValueError("a plan needs at least one topic")
+        return {"topics": topics[:topic_count]}
 
-    if section == "project":
-        start = (
-            "Topic 1 is the candidate's introduction through the project most relevant to this role (name it, e.g. \"Introduction and the order-tracking backend\"). "
-            "The opening greets them in one short sentence and asks for exactly that."
-        )
-    else:
-        start = (
-            "The opening is a one-line switch into fundamentals, then a question on topic 1, anchored in something the candidate uses where possible."
-        )
-    start += " The opening question must be about topic 1 and nothing else."
-    earlier = f"\nThings the candidate brought up earlier in the interview: {', '.join(earlier_mentions)}." if earlier_mentions else ""
-    return agent._json(
+    covered = f"\nTopics already covered in earlier rounds (do NOT repeat these — pick different skills): {', '.join(earlier_coverage)}." if earlier_coverage else ""
+    result = agent._json(
         _VOICE,
         agent._profile_context(profile)
-        + f"\n\nYou are about to run {_ROUND_GOAL[section]}{earlier}\n\n"
+        + f"\n\nYou are about to run {_ROUND_GOAL[section]}{covered}\n\n"
         f"Plan {topic_count} topics, each a skill or claim from the job description, the interviewer's criteria or the résumé that you need evidence on. "
         "After topic 1, order them by importance. Prefer requirements the résumé does not clearly prove. "
-        f"{start}\n\n"
-        'Return JSON: {"topics": [{"skill": short name, "why": one sentence on what you want to learn, "angle": how you will open it}], '
-        '"opening": the exact words you say first, ending in one question}.',
+        "Do not plan any topic that overlaps with skills already covered above.\n\n"
+        'Return JSON: {"topics": [{"skill": short name, "why": one sentence on what you want to learn, "angle": how you will open it}]}.',
         validate,
         temperature=0.6,
     )
+    # Hardcoded opening line — the LLM picks the topics, we write the first sentence.
+    first_skill = result["topics"][0]["skill"]
+    if section == "project":
+        result["opening"] = (
+            f"Let's start with your projects. Can you walk me through {first_skill} "
+            "— what you built, the tech you used, and what you personally did?"
+        )
+    else:
+        result["opening"] = (
+            f"Alright, let's switch to fundamentals. {first_skill} "
+            "— can you explain how that works and how you've used it?"
+        )
+    return result
 
 
 def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tuple[str, ...], turns_left: int, skipped: bool = False) -> dict:
@@ -191,14 +197,14 @@ def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tu
         '"decision": one of the allowed decisions, "new_topic": the skill name when the decision is probe_mention, otherwise "", '
         '"reply": exactly what you say next out loud: a brief acknowledgement, then one question (no question when wrapping up)}.'
     )
-    result = agent._json(_VOICE, prompt, validate, max_tokens=900, temperature=0.5)
+    result = agent._json(_VOICE, prompt, validate, max_tokens=700, temperature=0.5)
     if result["decision"] in allowed:
         return result
     correction = (
         f"\n\nYou chose {result['decision']}, which the budget does not allow right now. "
         f"Choose one of: {', '.join(allowed)}, and write the reply to match that choice."
     )
-    return agent._json(_VOICE, prompt + correction, validate, max_tokens=900, temperature=0.3)
+    return agent._json(_VOICE, prompt + correction, validate, max_tokens=700, temperature=0.3)
 
 
 def rate_round(profile: dict, section: str, state: dict) -> dict:
@@ -236,6 +242,6 @@ def rate_round(profile: dict, section: str, state: dict) -> dict:
         '"rating": number, "evidence": one or two sentences citing what they said and, below strong, what they did not show that a strong answer would have}], '
         '"summary": two sentences for the recruiter on what this round showed about the candidate for this job}.',
         validate,
-        max_tokens=1100,
+        max_tokens=900,
         temperature=0.2,
     )

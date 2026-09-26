@@ -38,7 +38,9 @@ The Interviewer's moves:
 | Move to the next skill                    | When it has enough evidence either way                  |
 | Wrap up                                   | When the round's turn budget is spent                   |
 
-A conversation engine keeps the Interviewer on track. Each round has a turn budget, with caps on follow-ups per topic and on chasing mentions. The allowed moves are recomputed on every turn. If the model picks a move outside the budget, it gets one targeted correction. If it strays again, the engine bends the move back within limits. The result is a round that digs where the evidence is thin and still finishes on time.
+A conversation engine keeps the Interviewer on track. Each round has a turn budget, with caps on follow-ups per topic and on chasing mentions. The engine aggregates skills covered across all rounds to ensure no redundant questions are asked. Allowed moves are recomputed on every turn. If the model picks a move outside the budget, it gets one targeted correction. If it strays again, the engine bends the move back within limits.
+
+To reduce latency, the conversation uses hardcoded openers and dynamically shrinks its context window by relying on an initial summary rather than the full resume on every turn. Candidates also have an option to abort the interview early from the dashboard or the voice screen.
 
 ### Voice, powered by [Cartesia](https://cartesia.ai)
 
@@ -62,7 +64,7 @@ Each report includes round scores, per-skill ratings with evidence, notes on com
 
 ### Monitoring
 
-Runs in the candidate's browser with MediaPipe and TensorFlow.js, and no video is uploaded. It records a missing face, extra people, a phone, gaze held off the screen, tab switches and full-screen exits. The recruiter sees these as observations to review, not verdicts.
+Runs in the candidate's browser with MediaPipe and TensorFlow.js, and no video is uploaded. It records a missing face, extra people, a phone, gaze held off the screen, tab switches and full-screen exits (even while models are loading). The recruiter sees these as observations to review, not verdicts. Right-click is disabled globally, and copy/paste is blocked during the spoken rounds.
 
 ## Under the hood
 
@@ -118,7 +120,7 @@ flowchart LR
 | Code execution | Judge0                                                          |
 | Monitoring     | MediaPipe Face Landmarker, TensorFlow.js COCO-SSD               |
 | Database       | MongoDB Atlas                                                   |
-| Hosting        | Vercel and Railway                                              |
+| Hosting        | Vercel and Render                                               |
 
 ## Getting started
 

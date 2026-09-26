@@ -59,16 +59,25 @@ export function FollowUps() {
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) setActive(Number((entry.target as HTMLElement).dataset.step));
+    function update() {
+      const mid = window.innerHeight / 2;
+      let best = 0;
+      let bestDist = Infinity;
+      stepRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const dist = Math.abs((rect.top + rect.bottom) / 2 - mid);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
         }
-      },
-      { rootMargin: "-45% 0px -45% 0px" },
-    );
-    for (const el of stepRefs.current) if (el) observer.observe(el);
-    return () => observer.disconnect();
+      });
+      setActive(best);
+    }
+
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
   }, []);
 
   const goTo = (i: number) => stepRefs.current[i]?.scrollIntoView({ block: "center" });
@@ -95,7 +104,7 @@ export function FollowUps() {
                   stepRefs.current[i] = el;
                 }}
                 data-step={i}
-                className="border-t border-line py-10 first:border-t-0 lg:flex lg:min-h-[52svh] lg:flex-col lg:last:min-h-[calc(100svh-4rem)] lg:justify-center lg:border-t-0 lg:py-0"
+                className="border-t border-line py-10 first:border-t-0 lg:flex lg:min-h-[44svh] lg:flex-col lg:last:min-h-[44svh] lg:justify-center lg:border-t-0 lg:py-0"
               >
                 <h3
                   className={cx(

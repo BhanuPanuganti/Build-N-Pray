@@ -140,6 +140,7 @@ export const api = {
   createSession: (profile: SessionProfile) => post<{ session_id: string }>("/sessions", profile),
   session: (id: string) => request<SessionSummary>(`/sessions/${id}`),
   skipSection: (id: string, section: SectionId) => post<SessionSummary>(`/sessions/${id}/sections/${section}/skip`),
+  endEarly: (id: string) => post<SessionSummary>(`/sessions/${id}/end-early`),
   startVoiceSection: (id: string, section: VoiceSectionId) => post<VoiceQuestion>(`/sessions/${id}/section`, { section }),
   questionSpeech: (id: string, signal?: AbortSignal) => audioRequest(`/sessions/${encodeURIComponent(id)}/speech`, signal),
   answer: (id: string, answer: string, skipped = false) =>

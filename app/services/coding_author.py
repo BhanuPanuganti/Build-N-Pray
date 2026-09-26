@@ -16,7 +16,7 @@ from app.services.code_runner.local import LocalExecutor
 _local = LocalExecutor()
 _FORBIDDEN = ("subprocess", "socket", "os.system", "shutil", "eval(", "exec(", "__import__", "open(")
 _JSON_WORD = re.compile(r"\bjson\b", re.IGNORECASE)
-_JSON_OBJECT = re.compile(r"""["'][A-Za-z_][A-Za-z0-9_]*["']\s*:""")
+_JSON_OBJECT = re.compile(r'\{[^{}"]*"[A-Za-z_][A-Za-z0-9_]*"\s*:')
 
 
 def _unwrap(text: object) -> str:

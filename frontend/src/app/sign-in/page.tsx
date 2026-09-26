@@ -32,8 +32,25 @@ function SignInForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
+
+    // Manual validation — gives a visible error instead of a silent browser tooltip
+    if (mode === "create") {
+      if (name.trim().length < 2) {
+        setError("Name must be at least 2 characters.");
+        return;
+      }
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters.");
+        return;
+      }
+      if (accountRole === "admin" && !accessCode.trim()) {
+        setError("Enter the interviewer access code.");
+        return;
+      }
+    }
+
+    setBusy(true);
     try {
       const user =
         mode === "create" ? await api.register(name, email, password, accountRole, accessCode) : await api.login(email, password);
@@ -48,7 +65,7 @@ function SignInForm() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-5 py-16">
       <Brand />
-      <form onSubmit={submit} className="mt-10 w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-lift">
+      <form onSubmit={submit} noValidate className="mt-10 w-full max-w-sm rounded-2xl border border-line bg-surface p-7 shadow-lift">
         <h1 className="font-display text-2xl font-semibold text-ink">{mode === "create" ? "Create your account" : "Welcome back"}</h1>
         <p className="mt-1.5 text-sm text-ink-2">
           {mode === "create" ? "Candidates take the interview link a recruiter sent. Interviewers publish one." : "Your account keeps interviews under your email."}
@@ -67,23 +84,23 @@ function SignInForm() {
         <div className="mt-6 space-y-4">
           {mode === "create" && (
             <>
-              <Field label="I am">
-                {() => (
-                  <Segmented
-                    label="Account role"
-                    value={accountRole}
-                    onChange={setAccountRole}
-                    options={[
-                      { value: "candidate", label: "Candidate" },
-                      { value: "admin", label: "Interviewer" },
-                    ]}
-                  />
-                )}
-              </Field>
-              <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} required minLength={2} autoComplete="name" />}</Field>
+              {/* Segmented is not a labellable input — use a plain label div to avoid a dangling htmlFor */}
+              <div className="flex flex-col gap-1.5">
+                <p className="text-sm font-medium text-ink">I am</p>
+                <Segmented
+                  label="Account role"
+                  value={accountRole}
+                  onChange={setAccountRole}
+                  options={[
+                    { value: "candidate", label: "Candidate" },
+                    { value: "admin", label: "Interviewer" },
+                  ]}
+                />
+              </div>
+              <Field label="Name">{(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />}</Field>
               {accountRole === "admin" && (
                 <Field label="Interviewer access code" hint="Ask whoever runs this BNB server for the code.">
-                  {(id) => <Input id={id} value={accessCode} onChange={(e) => setAccessCode(e.target.value)} required autoComplete="off" />}
+                  {(id) => <Input id={id} value={accessCode} onChange={(e) => setAccessCode(e.target.value)} autoComplete="off" />}
                 </Field>
               )}
             </>
@@ -98,8 +115,6 @@ function SignInForm() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={mode === "create" ? 8 : undefined}
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
               />
             )}

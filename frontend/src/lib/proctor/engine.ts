@@ -67,10 +67,10 @@ export class ProctorEngine {
     }
     if (!this.fullscreenArmed || this.stopped) return;
     void this.restoreFullscreen();
-    if (this.monitoringReady) void this.report("fullscreen_exit", "Tried to leave full-screen.");
+    void this.report("fullscreen_exit", "Tried to leave full-screen.");
   };
   private onEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || !this.monitoringReady || !this.fullscreenArmed || this.stopped || !document.fullscreenElement) return;
+    if (event.key !== "Escape" || !this.fullscreenArmed || this.stopped || !document.fullscreenElement) return;
     event.preventDefault();
     event.stopPropagation();
     void this.report("fullscreen_exit", "Tried to leave full-screen.");

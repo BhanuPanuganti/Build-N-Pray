@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SpokenAnswer } from "@/components/interview/spoken-answer";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Button, LinkButton } from "@/components/ui/button";
@@ -67,6 +68,7 @@ function Transcript({ turns }: { turns: ConversationTurn[] }) {
 }
 
 export function VoiceInterview({ sessionId, section }: Props) {
+  const router = useRouter();
   const speakerRef = useRef<QuestionSpeaker | null>(null);
   const currentRef = useRef<HTMLDivElement | null>(null);
   const generation = useRef(0);
@@ -114,6 +116,22 @@ export function VoiceInterview({ sessionId, section }: Props) {
       cancelled = true;
     };
   }, [sessionId, section, attempt]);
+
+  useEffect(() => {
+    function block(e: Event) {
+      e.preventDefault();
+    }
+    document.addEventListener("contextmenu", block);
+    document.addEventListener("copy", block);
+    document.addEventListener("cut", block);
+    document.addEventListener("paste", block);
+    return () => {
+      document.removeEventListener("contextmenu", block);
+      document.removeEventListener("copy", block);
+      document.removeEventListener("cut", block);
+      document.removeEventListener("paste", block);
+    };
+  }, []);
 
   useEffect(() => {
     if (!question) return;
@@ -194,6 +212,23 @@ export function VoiceInterview({ sessionId, section }: Props) {
     void send(answer.trim(), false);
   }
 
+  async function endEarly() {
+    if (!window.confirm("Are you sure you want to end the interview early? Unfinished sections will be marked as skipped.")) return;
+    setSending(true);
+    setError(null);
+    const current = speaker();
+    current.unlock();
+    current.stop();
+    setSpeaking(false);
+    try {
+      await api.endEarly(sessionId);
+      router.push(`/session/${sessionId}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not end the interview.");
+      setSending(false);
+    }
+  }
+
   if (loading && !question) return <PageLoading label="The interviewer is getting ready" />;
   if (error && !question && !complete) return <PageError message={error} onRetry={retry} />;
 
@@ -202,7 +237,14 @@ export function VoiceInterview({ sessionId, section }: Props) {
 
   return (
     <main id="assessment-workspace" className="min-h-full px-6 py-8 lg:px-10" data-voice={voice}>
-      <p className="text-sm font-medium text-ink-3">{sectionTitle(section)}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-ink-3">{sectionTitle(section)}</p>
+        {!complete && (
+          <Button variant="ghost" size="sm" className="text-danger hover:bg-danger-soft hover:text-danger-strong" onClick={() => void endEarly()} disabled={sending}>
+            End interview
+          </Button>
+        )}
+      </div>
       {topic && !complete ? (
         <p className="mt-2 text-sm text-ink-2">
           Now discussing <span className="font-medium text-ink">{topic}</span>

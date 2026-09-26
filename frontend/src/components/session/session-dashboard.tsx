@@ -58,6 +58,16 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
     }
   }
 
+  async function endEarly() {
+    if (!window.confirm("Are you sure you want to end the interview early? Unfinished sections will be marked as skipped.")) return;
+    setActionError(null);
+    try {
+      setData(await api.endEarly(sessionId));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not end the interview.");
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-3xl px-6 pb-20 pt-6 lg:px-10">
       <div className="flex items-center justify-between">
@@ -159,6 +169,14 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
       <p className="mt-8 text-[13px] leading-relaxed text-ink-3">
         Enable the camera and microphone before the coding round. That setup stays on while you move between rounds, so it does not interrupt the timer.
       </p>
+
+      {!allDone && (
+        <div className="mt-12 flex justify-center border-t border-line pt-8">
+          <Button variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger-strong" onClick={endEarly}>
+            End interview early
+          </Button>
+        </div>
+      )}
     </main>
   );
 }
