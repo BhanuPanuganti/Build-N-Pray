@@ -5,10 +5,7 @@ import type {
   AppConfig,
   DsaStart,
   DsaSubmitResult,
-  JudgeResult,
   Language,
-  Problem,
-  ProblemSummary,
   Report,
   RunResult,
   SectionId,
@@ -115,8 +112,8 @@ export const api = {
   createInterview: (draft: InterviewDraft) => post<InterviewDetail>("/admin/interviews", draft),
   attempts: (id: string) => request<Attempt[]>(`/admin/interviews/${id}/attempts`),
   publicInterview: (token: string) => request<PublicInterview>(`/interviews/${token}`),
-  joinInterview: (token: string, resume: string, preparationGoal: string) =>
-    post<{ session_id: string }>(`/interviews/${token}/sessions`, { resume, preparation_goal: preparationGoal }),
+  joinInterview: (token: string, resume: string) =>
+    post<{ session_id: string }>(`/interviews/${token}/sessions`, { resume }),
 
   extractDocument: (file: File) => {
     const form = new FormData();
@@ -124,19 +121,16 @@ export const api = {
     return post<{ file_name: string; text: string; characters: number }>("/documents/extract", form);
   },
 
-  problems: () => request<ProblemSummary[]>("/problems"),
-  problem: (slug: string) => request<Problem>(`/problems/${slug}`),
   runProblem: (slug: string, language: string, code: string, customInput?: string) =>
     post<RunResult>(`/problems/${slug}/run`, { language, code, custom_input: customInput ?? null }),
-  submitProblem: (slug: string, language: string, code: string) =>
-    post<JudgeResult>(`/problems/${slug}/submit`, { language, code }),
 
   createSession: (profile: SessionProfile) => post<{ session_id: string }>("/sessions", profile),
   session: (id: string) => request<SessionSummary>(`/sessions/${id}`),
   skipSection: (id: string, section: SectionId) => post<SessionSummary>(`/sessions/${id}/sections/${section}/skip`),
   startVoiceSection: (id: string, section: VoiceSectionId) => post<VoiceQuestion>(`/sessions/${id}/section`, { section }),
   questionSpeech: (id: string, signal?: AbortSignal) => audioRequest(`/sessions/${encodeURIComponent(id)}/speech`, signal),
-  answer: (id: string, answer: string) => post<AnswerResult>(`/sessions/${id}/answer`, { answer }),
+  answer: (id: string, answer: string, skipped = false) =>
+    post<AnswerResult>(`/sessions/${id}/answer`, skipped ? { skipped: true } : { answer }),
   transcribe: (id: string, audio: Blob) => {
     const form = new FormData();
     form.append("audio", audio, "answer.webm");

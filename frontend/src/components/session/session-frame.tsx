@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { ProctorMonitor } from "@/components/proctor/ProctorMonitor";
 import { DisqualifiedPage } from "@/components/session/disqualified-page";
 import { api } from "@/lib/api";
 import { useProctor } from "@/lib/proctor/use-proctor";
 import { useLoad } from "@/lib/use-load";
+
+const SessionProctorContext = createContext<ReturnType<typeof useProctor> | null>(null);
+
+export function useSessionProctor() {
+  const proctor = useContext(SessionProctorContext);
+  if (!proctor) throw new Error("Camera monitoring is only available inside a session.");
+  return proctor;
+}
 
 export function SessionFrame({ sessionId, children }: { sessionId: string; children: React.ReactNode }) {
   const proctor = useProctor(sessionId);
@@ -33,9 +41,11 @@ export function SessionFrame({ sessionId, children }: { sessionId: string; child
   }
 
   return (
-    <div className="flex min-h-full flex-col-reverse lg:grid lg:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="min-w-0">{children}</div>
-      <ProctorMonitor proctor={proctor} />
-    </div>
+    <SessionProctorContext.Provider value={proctor}>
+      <div className="flex min-h-full flex-col-reverse lg:grid lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0">{children}</div>
+        <ProctorMonitor proctor={proctor} serverWarnings={summary?.warnings ?? 0} />
+      </div>
+    </SessionProctorContext.Provider>
   );
 }

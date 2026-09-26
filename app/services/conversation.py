@@ -19,11 +19,27 @@ MAX_FOLLOW_UPS = 2
 MAX_PROBES = 2
 EXTRA_TURNS = 2
 FALLBACK_CLOSING = "That covers everything I wanted to ask in this round. Thanks for walking me through it."
+SKIPPED_ASSESSMENT = {
+    "score": None,
+    "signal": "skipped",
+    "strength": "You skipped this follow-up.",
+    "improvement": "This question was not scored. The answers you gave on this topic still count.",
+    "role_relevance": "",
+}
+
+
+class SkipNotAllowed(Exception):
+    """The current question is not a follow-up, so it cannot be skipped."""
 
 
 def _history(state: dict) -> list[dict]:
     return [
-        {"question": t["question"], "answer": t["answer"], "topic": state["topics"][t["topic"]]["skill"]}
+        {
+            "question": t["question"],
+            "answer": "" if t.get("skipped") else t["answer"],
+            "topic": state["topics"][t["topic"]]["skill"],
+            "skipped": bool(t.get("skipped")),
+        }
         for t in state["turns"]
         if t["answer"] is not None
     ]
@@ -55,6 +71,7 @@ def _activate(session, section: str, state: dict) -> dict:
         "question_number": len(state["turns"]),
         "total_questions": state["max_turns"],
         "topic": _current_skill(state),
+        "kind": state["turns"][-1]["kind"],
         "history": _history(state),
     }
 
@@ -86,6 +103,22 @@ def start(session, section: str) -> dict:
 
 def _has_upcoming(state: dict) -> bool:
     return any(t["status"] == "upcoming" for t in state["topics"])
+
+
+def _moves_after_skip(state: dict, turns_left: int) -> tuple[str, ...]:
+    """A skipped follow-up ends that thread. The interviewer moves on or closes."""
+    if turns_left > 0 and _has_upcoming(state):
+        return ("next_topic",)
+    return ("wrap_up",)
+
+
+def _fallback_skip_reply(state: dict, move: str) -> str:
+    if move == "wrap_up":
+        return f"That's fine, we'll leave that one. {FALLBACK_CLOSING}"
+    upcoming = next(topic for topic in state["topics"] if topic["status"] == "upcoming")
+    angle = str(upcoming.get("angle") or "").strip()
+    bridge = f"That's fine, we'll leave that one. Let's talk about {upcoming['skill']}."
+    return f"{bridge} {angle}".strip() if angle else bridge
 
 
 def _allowed(state: dict, turns_left: int) -> tuple[str, ...]:
@@ -140,7 +173,11 @@ def _close(session, section: str, state: dict) -> None:
         verdict["rated_by"] = "agent"
         score = round(sum(s["rating"] for s in verdict["skills"]) / len(verdict["skills"]))
     except AgentUnavailable:
-        scores = [t["assessment"]["score"] for t in state["turns"] if t["assessment"]]
+        scores = [
+            t["assessment"]["score"]
+            for t in state["turns"]
+            if t.get("assessment") and isinstance(t["assessment"].get("score"), (int, float))
+        ]
         verdict = {"skills": [], "summary": "", "rated_by": "answer_average"}
         score = round(sum(scores) / len(scores)) if scores else 0
     state["verdict"] = verdict
@@ -149,31 +186,41 @@ def _close(session, section: str, state: dict) -> None:
     session.active_section = None
 
 
-def respond(session, answer: str) -> dict:
+def respond(session, answer: str, skipped: bool = False) -> dict:
     section = session.active_section
     state = session.conversation[section]
     turn = state["turns"][-1]
+    if skipped and turn["kind"] != "follow_up":
+        raise SkipNotAllowed("Only a follow-up question can be skipped")
     turns_left = state["max_turns"] - len(state["turns"])
-    allowed = _allowed(state, turns_left)
-    result = interviewer.next_turn(session.profile, section, state, answer, allowed, turns_left)
+    allowed = _moves_after_skip(state, turns_left) if skipped else _allowed(state, turns_left)
+    result = interviewer.next_turn(session.profile, section, state, answer, allowed, turns_left, skipped=skipped)
+    if skipped:
+        result["assessment"] = dict(SKIPPED_ASSESSMENT)
+        if result["decision"] not in allowed:
+            result["decision"] = allowed[0]
+            result["reply"] = _fallback_skip_reply(state, result["decision"])
 
-    turn["answer"] = answer
+    turn["answer"] = "" if skipped else answer
+    turn["skipped"] = skipped
     turn["assessment"] = result["assessment"]
     topic = state["topics"][state["current"]]
-    if result["topic_level"]:
+    if result["topic_level"] and not skipped:
         topic["level"], topic["note"] = result["topic_level"], result["topic_note"]
-    state["mentions"].extend(m for m in result["mentions"] if m not in state["mentions"])
+    if not skipped:
+        state["mentions"].extend(m for m in result["mentions"] if m not in state["mentions"])
     session.answers.append({
         "section": section,
         "question": turn["question"],
-        "answer": answer,
+        "answer": "" if skipped else answer,
+        "skipped": skipped,
         "feedback": result["assessment"],
         "topic": topic["skill"],
         "kind": turn["kind"],
         "submitted_at": store.now(),
     })
 
-    move = _next_move(result["decision"], allowed, state)
+    move = result["decision"] if skipped else _next_move(result["decision"], allowed, state)
     session.current_question += 1
     if move == "wrap_up":
         state["closing"] = result["reply"] if result["decision"] == "wrap_up" else FALLBACK_CLOSING

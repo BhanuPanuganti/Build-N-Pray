@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi.testclient import TestClient
 
@@ -75,7 +76,8 @@ def test_refresh_resumes_mid_conversation_with_history():
     resumed = client.post(f"/api/sessions/{session_id}/section", json={"section": "project"}).json()
     assert resumed["question"] == reply["next_question"] != first["question"]
     assert resumed["question_number"] == 2
-    assert resumed["history"] == [{"question": first["question"], "answer": "I built a Flask API.", "topic": "Skill 1"}]
+    assert resumed["history"] == [{"question": first["question"], "answer": "I built a Flask API.", "topic": "Skill 1", "skipped": False}]
+    assert resumed["kind"] == "follow_up"
 
 
 def test_switching_rounds_keeps_each_conversation():
@@ -138,6 +140,86 @@ def _state(**overrides) -> dict:
         "current": 0, "follow_ups": 0, "probes": 0,
     }
     return {**state, **overrides}
+
+
+def _skip(session_id: str) -> dict:
+    response = client.post(f"/api/sessions/{session_id}/answer", json={"skipped": True})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_skipping_a_follow_up_moves_on_and_does_not_score_it():
+    session_id = _session()
+    client.post(f"/api/sessions/{session_id}/section", json={"section": "project"})
+    opening = client.post(f"/api/sessions/{session_id}/answer", json={"answer": ""})
+    assert opening.status_code == 422
+    blocked = client.post(f"/api/sessions/{session_id}/answer", json={"skipped": True})
+    assert blocked.status_code == 409
+
+    first = _answer(session_id, "I built a Flask API for bookings.")
+    assert first["kind"] == "follow_up"
+    skipped = _skip(session_id)
+    assert skipped["kind"] == "next_topic" and skipped["topic"] == "Skill 2"
+    assert skipped["feedback"]["signal"] == "skipped" and skipped["feedback"]["score"] is None
+
+    while not skipped["complete"]:
+        skipped = _answer(session_id, "A detailed answer with an example.")
+    report = client.get(f"/api/sessions/{session_id}/report").json()
+    answers = report["section_summaries"]["project"]["answers"]
+    assert answers[0]["answer"] == "I built a Flask API for bookings." and answers[0]["feedback"]["score"] == 80
+    assert answers[1]["skipped"] is True and answers[1]["kind"] == "follow_up" and answers[1]["feedback"]["score"] is None
+    assert report["section_summaries"]["project"]["average_score"] == 80
+
+
+def test_follow_ups_answered_before_a_skip_are_what_gets_rated(monkeypatch):
+    from tests.conftest import scripted_reply
+
+    rating_prompts: list[str] = []
+
+    def chat(system, user, max_tokens, temperature, **extra):
+        if '"skills": [' in user:
+            rating_prompts.append(user)
+        if '"decision"' not in user:
+            return scripted_reply(system, user, max_tokens, temperature, **extra)
+        allowed = re.search(r"Allowed decisions right now: ([a-z_, ]+)\.", user).group(1).split(", ")
+        follow_ups = int(re.search(r"Follow-ups already asked on the current topic: (\d+)", user).group(1))
+        if "skipped this follow-up" in user:
+            decision = next(d for d in ("next_topic", "wrap_up") if d in allowed)
+        elif follow_ups < 2 and "follow_up" in allowed:
+            decision = "follow_up"
+        else:
+            decision = next(d for d in ("next_topic", "wrap_up") if d in allowed)
+        reply = "Thanks, that is all for this round." if decision == "wrap_up" else f"Scripted {decision}?"
+        return json.dumps({
+            "assessment": {"score": 80, "signal": "solid", "strength": "Specific.", "improvement": "Add numbers.", "role_relevance": "Relevant."},
+            "mentions": [],
+            "topic_verdict": {"level": "solid", "note": "Explained the cache."},
+            "decision": decision,
+            "new_topic": "",
+            "reply": reply,
+        })
+
+    monkeypatch.setattr(agent, "_chat", chat)
+    session_id = _session()
+    client.post(f"/api/sessions/{session_id}/section", json={"section": "project"})
+    assert _answer(session_id, "I built a Flask API for bookings.")["kind"] == "follow_up"
+    second = _answer(session_id, "We cached reads in Redis and measured p95 latency.")
+    assert second["kind"] == "follow_up"
+    skipped = _skip(session_id)
+    assert skipped["kind"] == "next_topic"
+    while not skipped["complete"]:
+        skipped = _answer(session_id, "A detailed answer with an example.")
+
+    assert rating_prompts, "the round should be rated"
+    rated = rating_prompts[-1]
+    assert "We cached reads in Redis and measured p95 latency." in rated
+    assert "[skipped this follow-up]" in rated
+    assert "that skip is not a wrong answer" in rated
+    report = client.get(f"/api/sessions/{session_id}/report").json()
+    answers = report["section_summaries"]["project"]["answers"]
+    assert answers[1]["answer"] == "We cached reads in Redis and measured p95 latency."
+    assert answers[1]["feedback"]["score"] == 80
+    assert answers[2]["skipped"] is True and answers[2]["feedback"]["score"] is None
 
 
 def test_budget_limits_what_the_interviewer_may_do():

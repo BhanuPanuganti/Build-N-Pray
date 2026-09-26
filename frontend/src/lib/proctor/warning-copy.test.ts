@@ -11,6 +11,7 @@ test("gaze, light, and people toasts use the measured detail", () => {
   assert.equal(describeWarning("low_light", "Lighting observation: too_bright.").title, "Too much light");
   assert.equal(describeWarning("low_light", "Lighting observation: too_dark.").title, "Too little light");
   assert.equal(describeWarning("multiple_people", "Camera detected 2 people.").detail, "The camera saw 2 people.");
+  assert.equal(describeWarning("fullscreen_exit", "Tried to leave full-screen.").title, "Tried to leave full-screen");
   assert.equal(describeWarning("tab_hidden", "").title, "Left this tab");
   assert.equal(describeWarning("tab_hidden", "The assessment window lost focus.").title, "Left the window");
   assert.equal(describeWarning("suspicious_phone", "").title, "Phone detected");

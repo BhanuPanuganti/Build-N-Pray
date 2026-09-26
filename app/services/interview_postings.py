@@ -9,6 +9,7 @@ from app.api.code_routes import public_problem
 from app.problems.dynamic import remember
 from app.problems.serialize import problem_from_dict, problem_to_dict
 from app.services.agent import agent
+from app.services.document_text import normalize_document_text
 from app.services.repository import repository
 from app.services.session_store import store
 from app.workflows.interview_graph import interview_graph
@@ -26,7 +27,7 @@ def candidate_view(doc: dict) -> dict:
     return {
         "token": doc["token"],
         "role": doc["role"],
-        "job_description": doc["job_description"],
+        "job_description": normalize_document_text(doc["job_description"]),
         "interview_focus": doc["interview_focus"],
         "difficulty": doc["difficulty"],
         "dsa_enabled": doc["dsa_enabled"],
@@ -51,6 +52,7 @@ def admin_view(doc: dict, attempt_count: int) -> dict:
 
 
 def prepare_interview(admin: dict, spec: dict) -> dict:
+    spec = {**spec, "job_description": normalize_document_text(spec["job_description"])}
     profile = {
         "candidate_name": "the hiring panel",
         "role": spec["role"],
@@ -90,7 +92,7 @@ def prepare_interview(admin: dict, spec: dict) -> dict:
     return doc
 
 
-def start_attempt(user: dict, token: str, resume: str, goal: str):
+def start_attempt(user: dict, token: str, resume: str):
     interview = repository.interview_by_token(token)
     if interview is None:
         return None
@@ -99,9 +101,9 @@ def start_attempt(user: dict, token: str, resume: str, goal: str):
         "candidate_name": user["name"],
         "candidate_email": user["email"],
         "role": interview["role"],
-        "job_description": interview["job_description"],
+        "job_description": normalize_document_text(interview["job_description"]),
         "resume": resume,
-        "preparation_goal": goal,
+        "preparation_goal": interview["interview_focus"],
         "interview_focus": interview["interview_focus"],
         "difficulty": interview["difficulty"],
         "dsa_enabled": interview["dsa_enabled"],

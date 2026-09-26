@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ProctorEventType(str, Enum):
@@ -31,7 +31,17 @@ class StartSessionRequest(BaseModel):
 
 
 class AnswerRequest(BaseModel):
-    answer: str = Field(min_length=1, max_length=8000)
+    answer: str = Field(default="", max_length=8000)
+    skipped: bool = False
+
+    @model_validator(mode="after")
+    def answer_unless_skipped(self):
+        if self.skipped:
+            self.answer = ""
+            return self
+        if not self.answer.strip():
+            raise ValueError("Answer is required unless the question is skipped")
+        return self
 
 
 class SectionStartRequest(BaseModel):
@@ -101,4 +111,3 @@ class CreateInterviewRequest(BaseModel):
 
 class JoinInterviewRequest(BaseModel):
     resume: str = Field(min_length=10, max_length=8000)
-    preparation_goal: str = Field(min_length=5, max_length=1000)

@@ -156,13 +156,14 @@ export type SessionProfile = {
 };
 
 export type AnswerFeedback = {
-  score: number;
+  score: number | null;
+  signal?: string;
   strength: string;
   improvement: string;
   role_relevance?: string;
 };
 
-export type ConversationTurn = { question: string; answer: string; topic: string };
+export type ConversationTurn = { question: string; answer: string; topic: string; skipped?: boolean };
 
 export type InterviewerMove = "follow_up" | "probe_mention" | "next_topic" | "wrap_up";
 
@@ -172,6 +173,7 @@ export type VoiceQuestion = {
   question_number: number;
   total_questions: number;
   topic: string;
+  kind: InterviewerMove | "opening";
   history: ConversationTurn[];
 };
 
@@ -199,7 +201,7 @@ export type ProctorEvent = { type: string; details: string; observed_at?: string
 export type Report = {
   overall_score: number;
   summary: string;
-  section_summaries: Record<string, { answer_count: number; average_score: number; answers: { section: string; question: string; answer: string; feedback: AnswerFeedback; topic?: string; kind?: InterviewerMove | "opening" }[] }>;
+  section_summaries: Record<string, { answer_count: number; average_score: number; answers: { section: string; question: string; answer: string; skipped?: boolean; feedback: AnswerFeedback; topic?: string; kind?: InterviewerMove | "opening" }[] }>;
   communication_assessment: Record<string, string>;
   next_steps: string[];
   integrity_observations: ProctorEvent[];

@@ -51,7 +51,7 @@ def public_interview(token: str):
 
 @router.post("/interviews/{token}/sessions")
 def join_interview(token: str, request: JoinInterviewRequest, user: dict = Depends(require_user)):
-    session = start_attempt(user, token, request.resume, request.preparation_goal)
+    session = start_attempt(user, token, request.resume)
     if session is None:
         raise HTTPException(404, "Interview link not found")
     return {"session_id": session.id, "sections": session.sections}

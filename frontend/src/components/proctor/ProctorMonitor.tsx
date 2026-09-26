@@ -3,8 +3,9 @@
 import { Button } from "@/components/ui/button";
 import type { useProctor } from "@/lib/proctor/use-proctor";
 
-export function ProctorMonitor({ proctor }: { proctor: ReturnType<typeof useProctor> }) {
-  const { videoRef, status, warnings, limit, toasts, signals, running, starting, locked, start } = proctor;
+export function ProctorMonitor({ proctor, serverWarnings = 0 }: { proctor: ReturnType<typeof useProctor>; serverWarnings?: number }) {
+  const { videoRef, status, warnings: liveWarnings, limit, toasts, running, starting, locked, start } = proctor;
+  const warnings = Math.max(liveWarnings, serverWarnings);
 
   return (
     <aside className="flex flex-col gap-4 border-line bg-surface p-4 lg:border-l">
@@ -26,29 +27,9 @@ export function ProctorMonitor({ proctor }: { proctor: ReturnType<typeof useProc
       </div>
       <video ref={videoRef} className="aspect-video w-full rounded-lg bg-black object-cover -scale-x-100" autoPlay muted playsInline />
       <p className="min-h-10 text-sm leading-5 text-ink-2" aria-live="polite">{status}</p>
-      {signals && running ? (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-          <div>
-            <dt className="text-ink-3">Face</dt>
-            <dd className="font-medium">{signals.faceVisible ? "Visible" : "Not visible"}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-3">People</dt>
-            <dd className="font-medium">{signals.people}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-3">Gaze</dt>
-            <dd className="font-medium">{signals.gazeAwaySeconds > 0 ? `Away ${signals.gazeAwaySeconds.toFixed(1)}s` : "On screen"}</dd>
-          </div>
-          <div>
-            <dt className="text-ink-3">Mouth</dt>
-            <dd className="font-medium">{signals.mouthSeconds > 0 ? `Moving ${signals.mouthSeconds.toFixed(1)}s` : "Still"}</dd>
-          </div>
-        </dl>
-      ) : null}
       <p className="text-sm font-medium">Warnings: {warnings} / {limit}</p>
       <Button className="w-full" onClick={() => void start()} disabled={starting || running || locked}>
-        {locked ? "Monitoring locked" : starting ? "Starting camera…" : running ? "Monitoring active" : "Enable camera"}
+        {locked ? "Monitoring locked" : starting ? "Starting…" : running ? "Camera and mic on" : "Enable camera and mic"}
       </Button>
     </aside>
   );

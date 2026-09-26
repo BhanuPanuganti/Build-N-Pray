@@ -86,9 +86,6 @@ export default function Home() {
               <LinkButton href="/admin" variant="secondary" size="lg">
                 Interview a group
               </LinkButton>
-              <LinkButton href="/practice" variant="ghost" size="lg">
-                Practice coding problems
-              </LinkButton>
             </div>
           </div>
           <WorkspacePreview />
