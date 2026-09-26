@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta, timezone
 from app.services.documents import extract_text
-from app.services.llm import llm
+from app.services.agent import agent
 from app.services.proctoring import add_warning, check_lighting
+from app.services.report import build_report
 from app.services.session_store import store
 from app.services.repository import repository
 
@@ -27,9 +28,9 @@ def process_warning(kind, detail):
     repository.save_session(session)
     if result["disqualified"]:
         st.session_state.complete = True
-        st.error("Interview ended after three integrity warnings.")
+        st.error(f"Interview ended after {result['warning_limit']} integrity warnings.")
     else:
-        st.warning(f"Warning {result['warnings']} of 3: {detail}")
+        st.warning(f"Warning {result['warnings']} of {result['warning_limit']}: {detail}")
 
 
 def begin(profile):
@@ -56,7 +57,7 @@ def next_round():
         st.session_state.complete = True
         return
     name = current_round().lower()
-    session.questions = llm.round_questions(session.profile, name)
+    session.questions = agent.round_questions(session.profile, name)
 
 
 init_state()
@@ -126,7 +127,7 @@ else:
                 st.subheader(title); st.write(description); status = st.session_state.sections[key]; st.caption(f"Status: {status.replace('_', ' ').title()}")
                 if status not in {"completed", "skipped"} and st.button("Start" if status == "not_started" else "Resume", key=f"start_{key}"):
                     st.session_state.sections[key] = "in_progress"
-                    st.link_button("Open secure live assessment", f"http://127.0.0.1:8000/assessment.html?session_id={st.session_state.backend_session_id}&section={key}")
+                    st.link_button("Open secure live assessment", f"http://localhost:3000/session/{st.session_state.backend_session_id}?section={key}")
                 if status == "not_started" and st.button("Skip", key=f"skip_{key}"):
                     st.session_state.sections[key] = "skipped"; repository.save_session(session); st.rerun()
         st.stop()
@@ -142,7 +143,7 @@ else:
                 st.warning("Improve lighting before continuing.")
         audio = st.audio_input("Record an answer")
         if audio and st.button("Transcribe recording"):
-            st.session_state.answer_text = llm.transcribe_audio(audio.getvalue())
+            st.session_state.answer_text = agent.transcribe_audio(audio.getvalue())
         st.subheader("Assessment monitoring")
         st.caption("Camera and browser integrity checks run automatically during the assessment. Candidates cannot edit or submit monitoring events.")
     with left:
@@ -156,9 +157,9 @@ else:
                 st.warning("The 30-minute interview limit has ended.")
                 st.rerun()
         if st.session_state.complete:
-            report = llm.final_feedback(session)
+            report = build_report(session)
             if session.disqualified:
-                st.error("Result: disqualified after three integrity warnings.")
+                st.error(f"Result: disqualified after {session.warnings} integrity warnings.")
             else:
                 st.success("Interview complete")
             st.json(report)
@@ -186,11 +187,8 @@ else:
                 st.warning("Record an answer using the microphone to continue.")
             text = st.session_state.answer_text
             if audio and st.button("Transcribe and submit voice answer", type="primary"):
-                text = llm.transcribe_audio(audio.getvalue())
-                if text.startswith("Demo mode"):
-                    st.error("Speech-to-text requires DEMO_MODE=false and a valid Hugging Face token.")
-                    st.stop()
-                feedback = llm.critique(question, text, session.profile)
+                text = agent.transcribe_audio(audio.getvalue())
+                feedback = agent.critique(question, text, session.profile, st.session_state.section)
                 session.answers.append({"section": st.session_state.section, "question": question, "answer": text, "feedback": feedback, "submitted_at": store.now()})
                 st.session_state.answer_text = ""
                 st.info(f"Score: {feedback['score']}. {feedback['improvement']}")
