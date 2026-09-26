@@ -2,7 +2,7 @@ import os
 import requests
 from pymongo import MongoClient
 
-mongo_uri = "mongodb+srv://vishnudatta2004_db_user:TWtpNynGDI9dHwco@bnb.wfnygwm.mongodb.net/?appName=bnb"
+mongo_uri = os.environ.get("MONGODB_URI", "mongodb+srv://vishnudatta2004_db_user:2rWKJWaDfHoHseUc@fluensee.qsfs73c.mongodb.net/?appName=FluenSee")
 client = MongoClient(mongo_uri)
 db = client["bnb_interview"]
 
