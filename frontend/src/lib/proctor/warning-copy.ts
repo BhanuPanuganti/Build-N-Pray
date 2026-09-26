@@ -25,7 +25,7 @@ export function describeWarning(type: string, details: string): WarningCopy {
       if (details.toLowerCase().includes("lost focus")) return { title: "Left the window", detail: "The assessment window lost focus." };
       return { title: "Left this tab", detail: "The assessment tab was hidden." };
     case "fullscreen_exit":
-      return { title: "Left full-screen", detail: "The assessment is no longer full-screen." };
+      return { title: "Tried to leave full-screen", detail: "That attempt was counted. The assessment stays full-screen." };
     case "face_missing":
       return { title: "Face not visible", detail: "Your face left the camera." };
     case "multiple_people": {

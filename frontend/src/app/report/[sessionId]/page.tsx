@@ -19,7 +19,7 @@ const SECTION_TITLES: Record<string, string> = {
 
 const OBSERVATION_LABELS: Record<string, string> = {
   tab_hidden: "Left the interview tab",
-  fullscreen_exit: "Left full-screen",
+  fullscreen_exit: "Tried to leave full-screen",
   face_missing: "Face not visible",
   multiple_people: "More than one person",
   low_light: "Lighting",
@@ -151,19 +151,27 @@ function ReportBody({ report }: { report: Report }) {
                 )}
                 <div className="flex items-start justify-between gap-4">
                   <p className="font-medium leading-relaxed text-ink">{item.question}</p>
-                  <span className="shrink-0 rounded-md bg-surface-2 px-2 py-0.5 font-mono text-[13px] text-ink">{item.feedback.score}</span>
+                  <span className="shrink-0 rounded-md bg-surface-2 px-2 py-0.5 font-mono text-[13px] text-ink">
+                    {item.skipped || item.feedback.score == null ? "Skipped" : item.feedback.score}
+                  </span>
                 </div>
-                <p className="mt-3 border-l-2 border-line pl-3 text-[14px] leading-relaxed text-ink-2">{item.answer}</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <p className="text-[13px] leading-relaxed text-ink-2">
-                    <span className="block font-medium text-accent">What worked</span>
-                    {item.feedback.strength}
-                  </p>
-                  <p className="text-[13px] leading-relaxed text-ink-2">
-                    <span className="block font-medium text-amber">What to improve</span>
-                    {item.feedback.improvement}
-                  </p>
-                </div>
+                <p className="mt-3 border-l-2 border-line pl-3 text-[14px] leading-relaxed text-ink-2">
+                  {item.skipped ? "Skipped" : item.answer}
+                </p>
+                {item.skipped ? (
+                  <p className="mt-4 text-[13px] leading-relaxed text-ink-2">{item.feedback.improvement}</p>
+                ) : (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <p className="text-[13px] leading-relaxed text-ink-2">
+                      <span className="block font-medium text-accent">What worked</span>
+                      {item.feedback.strength}
+                    </p>
+                    <p className="text-[13px] leading-relaxed text-ink-2">
+                      <span className="block font-medium text-amber">What to improve</span>
+                      {item.feedback.improvement}
+                    </p>
+                  </div>
+                )}
               </li>
             ))}
           </ol>

@@ -7,7 +7,7 @@ import { Button, LinkButton } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/field";
 import { api, ApiError } from "@/lib/api";
 import { QuestionSpeaker, type SpeakResult } from "@/lib/question-voice";
-import type { ConversationTurn, VoiceSectionId } from "@/lib/types";
+import type { ConversationTurn, InterviewerMove, VoiceSectionId } from "@/lib/types";
 
 type Props = {
   sessionId: string;
@@ -58,7 +58,7 @@ function Transcript({ turns }: { turns: ConversationTurn[] }) {
           </p>
           <p className="mt-1.5 text-ink">
             <span className="mr-2 text-[12px] font-medium uppercase tracking-wide text-ink-3">You</span>
-            {turn.answer}
+            {turn.skipped ? "Skipped" : turn.answer}
           </p>
         </li>
       ))}
@@ -71,6 +71,7 @@ export function VoiceInterview({ sessionId, section }: Props) {
   const currentRef = useRef<HTMLDivElement | null>(null);
   const generation = useRef(0);
   const [question, setQuestion] = useState<string | null>(null);
+  const [kind, setKind] = useState<InterviewerMove | "opening">("opening");
   const [topic, setTopic] = useState("");
   const [history, setHistory] = useState<ConversationTurn[]>([]);
   const [answer, setAnswer] = useState("");
@@ -98,6 +99,7 @@ export function VoiceInterview({ sessionId, section }: Props) {
       .then((data) => {
         if (cancelled) return;
         setQuestion(data.question);
+        setKind(data.kind);
         setTopic(data.topic);
         setHistory(data.history);
         setLoading(false);
@@ -159,10 +161,9 @@ export function VoiceInterview({ sessionId, section }: Props) {
     });
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    const text = answer.trim();
-    if (!text || !question || sending || complete) return;
+  async function send(text: string, skipped: boolean) {
+    if (!question || sending || complete) return;
+    if (skipped ? kind !== "follow_up" : text === "") return;
     const current = speaker();
     current.unlock();
     current.stop();
@@ -170,9 +171,10 @@ export function VoiceInterview({ sessionId, section }: Props) {
     setSending(true);
     setError(null);
     try {
-      const result = await api.answer(sessionId, text);
-      setHistory((turns) => [...turns, { question, answer: text, topic }]);
+      const result = await api.answer(sessionId, text, skipped);
+      setHistory((turns) => [...turns, { question, answer: text, topic, skipped }]);
       setAnswer("");
+      setKind(result.kind);
       setTopic(result.topic);
       if (result.complete || !result.next_question) {
         setClosing(result.closing ?? "That's the end of this round.");
@@ -180,11 +182,16 @@ export function VoiceInterview({ sessionId, section }: Props) {
         return;
       }
       setQuestion(result.next_question);
-    } catch (submitError) {
-      setError(submitError instanceof ApiError ? submitError.message : "Could not send the answer.");
+    } catch (sendError) {
+      setError(sendError instanceof ApiError ? sendError.message : skipped ? "Could not skip the question." : "Could not send the answer.");
     } finally {
       setSending(false);
     }
+  }
+
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    void send(answer.trim(), false);
   }
 
   if (loading && !question) return <PageLoading label="The interviewer is getting ready" />;
@@ -256,9 +263,16 @@ export function VoiceInterview({ sessionId, section }: Props) {
               onChange={(event) => setAnswer(event.target.value)}
             />
             {error ? <p className="mt-2 text-[13px] text-danger">{error}</p> : null}
-            <Button className="mt-4" type="submit" loading={sending} disabled={answer.trim() === ""}>
-              {sending ? "Sending" : "Send answer"}
-            </Button>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button type="submit" loading={sending} disabled={answer.trim() === ""}>
+                {sending ? "Sending" : "Send answer"}
+              </Button>
+              {kind === "follow_up" ? (
+                <Button type="button" variant="ghost" onClick={() => void send("", true)} disabled={sending}>
+                  Skip question
+                </Button>
+              ) : null}
+            </div>
           </form>
         </>
       )}

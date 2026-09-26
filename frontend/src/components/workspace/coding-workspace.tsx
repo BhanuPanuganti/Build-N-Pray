@@ -18,7 +18,7 @@ import type { JudgeResult, Language, Problem } from "@/lib/types";
 type Props = {
   problem: Problem;
   languages: Language[];
-  /** Namespaces saved drafts, e.g. "practice" or "session:<id>". */
+  /** Namespaces saved drafts, e.g. "session:<id>". */
   scope: string;
   backHref: string;
   backLabel: string;

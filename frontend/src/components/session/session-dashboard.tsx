@@ -10,6 +10,7 @@ import { Button, LinkButton } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { difficultyLabel, formatClock } from "@/lib/format";
 import { useLoad } from "@/lib/use-load";
+import { useSessionProctor } from "@/components/session/session-frame";
 import type { SectionId, SessionSummary } from "@/lib/types";
 
 const SECTIONS: { id: SectionId; title: string; body: string }[] = [
@@ -34,6 +35,7 @@ function detail(summary: SessionSummary, section: SectionId): string | null {
 
 export function SessionDashboard({ sessionId }: { sessionId: string }) {
   const { data: summary, error, reload, setData } = useLoad(() => api.session(sessionId), sessionId);
+  const proctor = useSessionProctor();
   const [skipping, setSkipping] = useState<SectionId | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -112,7 +114,12 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
                     Skip
                   </Button>
                 )}
-                {open && (
+                {open && section.id === "dsa" && !proctor.running ? (
+                  <Button size="sm" onClick={() => void proctor.start()} loading={proctor.starting}>
+                    Enable camera and mic
+                  </Button>
+                ) : null}
+                {open && (section.id !== "dsa" || proctor.running) && (
                   <LinkButton href={sectionHref(sessionId, section.id)} size="sm">
                     {status === "in_progress" ? "Resume" : "Start"}
                   </LinkButton>
@@ -140,7 +147,7 @@ export function SessionDashboard({ sessionId }: { sessionId: string }) {
       )}
 
       <p className="mt-8 text-[13px] leading-relaxed text-ink-3">
-        Turn on camera monitoring in the side panel before you start a round. It stays on while you move between rounds.
+        Enable the camera and microphone before the coding round. That setup stays on while you move between rounds, so it does not interrupt the timer.
       </p>
     </main>
   );

@@ -108,9 +108,13 @@ class Repository:
             "id": session.id,
             "profile": session.profile,
             "answers": session.answers,
+            "questions": session.questions,
+            "current_question": session.current_question,
             "proctor_events": session.proctor_events,
             "warnings": session.warnings,
             "disqualified": session.disqualified,
+            "vision_latches": session.vision_latches,
+            "round_index": session.round_index,
             "round_scores": session.round_scores,
             "dsa": session.dsa,
             "sections": session.sections,
@@ -130,6 +134,11 @@ class Repository:
         clean = dict(doc)
         clean.pop("_id", None)
         return clean
+
+    def load_session(self, session_id: str) -> dict | None:
+        if self.db is not None:
+            return self._strip(self.db.sessions.find_one({"id": session_id}))
+        return self.memory_sessions.get(session_id)
 
     def insert_interview(self, doc: dict) -> dict:
         if self.db is not None:

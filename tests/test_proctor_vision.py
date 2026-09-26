@@ -54,6 +54,22 @@ def test_face_missing_counts_once_per_absence():
     assert third["warnings"] == 2
 
 
+def test_warnings_continue_after_the_in_memory_session_is_dropped():
+    from app.services.session_store import store
+
+    active = session_id()
+    for expected in range(1, 6):
+        store.sessions.pop(active, None)
+        observe(active, gaze_away_seconds=0)
+        result = observe(active, gaze_away_seconds=12)
+        assert result["warnings"] == expected
+        assert result["disqualified"] is (expected == 5)
+    summary = client.get(f"/api/sessions/{active}")
+    assert summary.status_code == 200
+    assert summary.json()["disqualified"] is True
+    assert summary.json()["warnings"] == 5
+
+
 def test_quiet_frames_and_short_mouth_motion_are_not_stored():
     from app.services.session_store import store
 

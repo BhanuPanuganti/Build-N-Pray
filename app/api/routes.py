@@ -168,7 +168,10 @@ def submit_answer(session_id: str, request: AnswerRequest):
     section = session.active_section or "general"
     if section in CONVERSATIONAL_SECTIONS:
         with _lock_for(session_id):
-            result = conversation.respond(session, request.answer)
+            try:
+                result = conversation.respond(session, request.answer, skipped=request.skipped)
+            except conversation.SkipNotAllowed as exc:
+                raise HTTPException(409, str(exc)) from exc
             repository.save_session(session)
         return result
     question = session.questions[session.current_question]
@@ -327,8 +330,7 @@ def record_vision_observation(session_id: str, request: VisionObservationRequest
     for item in outcomes:
         item["event"]["observed_at"] = store.now()
         item["event"]["source"] = request.source
-    if outcomes or recorded_mouth:
-        repository.save_session(session)
+    repository.save_session(session)
     return {"recorded": True, "warnings": session.warnings, "warning_limit": settings.proctor_warning_limit, "disqualified": session.disqualified, "observations": outcomes}
 
 

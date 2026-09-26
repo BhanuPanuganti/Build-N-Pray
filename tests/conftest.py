@@ -58,7 +58,7 @@ def _interviewer_turn(user: str) -> str:
     })
 
 
-def scripted_reply(system: str, user: str, max_tokens: int, temperature: float) -> str:
+def scripted_reply(system: str, user: str, max_tokens: int, temperature: float, **_extra) -> str:
     if "reference_python" in user:
         return json.dumps(_AUTHORED_PROBLEM)
     if '"opening"' in user:

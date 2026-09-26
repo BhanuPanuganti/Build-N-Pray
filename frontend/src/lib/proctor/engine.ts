@@ -54,12 +54,26 @@ export class ProctorEngine {
   private transportNoted = false;
   private fullscreenArmed = false;
   private fullscreenNote = "";
+  private restoringFullscreen = false;
+  private monitoringReady = false;
   private onVisibility = () => {
     if (document.hidden) void this.report("tab_hidden", "Assessment tab became hidden.");
   };
   private onFullscreen = () => {
-    if (document.fullscreenElement) this.fullscreenArmed = true;
-    else if (this.fullscreenArmed) void this.report("fullscreen_exit", "Full-screen mode exited.");
+    if (document.fullscreenElement) {
+      this.fullscreenArmed = true;
+      void this.lockEscape();
+      return;
+    }
+    if (!this.fullscreenArmed || this.stopped) return;
+    void this.restoreFullscreen();
+    if (this.monitoringReady) void this.report("fullscreen_exit", "Tried to leave full-screen.");
+  };
+  private onEscape = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || !this.monitoringReady || !this.fullscreenArmed || this.stopped || !document.fullscreenElement) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.report("fullscreen_exit", "Tried to leave full-screen.");
   };
   private onBlur = () => {
     if (document.hidden) return;
@@ -81,23 +95,25 @@ export class ProctorEngine {
       // Monitoring can still start. The server applies the warning limit to each observation.
     }
     this.ui.onWarnings(0, this.warningLimit);
-    this.ui.onStatus("Requesting the camera…");
+    this.ui.onStatus("Requesting the camera and microphone…");
     try {
       this.video.srcObject = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
+        audio: true,
       });
       await this.video.play();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Camera permission was blocked.";
+      const message = error instanceof Error ? error.message : "Camera or microphone permission was blocked.";
       void this.report("camera_unavailable", message);
-      throw new Error("Camera permission is required for monitoring.");
+      throw new Error("Allow the camera and microphone before the coding round.");
     }
     document.addEventListener("visibilitychange", this.onVisibility);
     document.addEventListener("fullscreenchange", this.onFullscreen);
     window.addEventListener("blur", this.onBlur);
+    window.addEventListener("keydown", this.onEscape, true);
     try {
       await document.documentElement.requestFullscreen();
+      await this.lockEscape();
     } catch {
       this.fullscreenNote = " Full-screen was declined.";
     }
@@ -112,16 +128,22 @@ export class ProctorEngine {
       throw new Error(message);
     }
     if (this.stopped) return;
+    this.monitoringReady = true;
     this.ui.onStatus("Monitoring active. Looking toward the screen.");
     this.frame = requestAnimationFrame(this.tick);
   }
 
   stop(): void {
     this.stopped = true;
+    this.monitoringReady = false;
     cancelAnimationFrame(this.frame);
+    this.fullscreenArmed = false;
     document.removeEventListener("visibilitychange", this.onVisibility);
     document.removeEventListener("fullscreenchange", this.onFullscreen);
     window.removeEventListener("blur", this.onBlur);
+    window.removeEventListener("keydown", this.onEscape, true);
+    unlockEscape();
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     this.landmarker?.close();
     this.landmarker = null;
     const stream = this.video.srcObject;
@@ -175,6 +197,32 @@ export class ProctorEngine {
       this.ui.onStatus(error instanceof Error ? error.message : "Monitoring frame failed.");
     }
   };
+
+  private async lockEscape(): Promise<void> {
+    const keyboard = escapeLock();
+    if (!keyboard || !document.fullscreenElement) return;
+    try {
+      await keyboard.lock(["Escape"]);
+    } catch {
+      // The browser refused to hold Escape. Leaving full-screen still counts, and we try to return.
+    }
+  }
+
+  private async restoreFullscreen(): Promise<void> {
+    if (this.stopped || this.restoringFullscreen || document.fullscreenElement) return;
+    this.restoringFullscreen = true;
+    try {
+      await document.documentElement.requestFullscreen();
+      await this.lockEscape();
+      this.fullscreenNote = "";
+    } catch {
+      this.fullscreenNote = " Full-screen was left.";
+      this.lastLabel = "";
+      this.ui.onStatus("Full-screen was left. The attempt was counted.");
+    } finally {
+      this.restoringFullscreen = false;
+    }
+  }
 
   private publishDirection(direction: "center" | "side" | "up" | "down"): void {
     const label = `Monitoring active. ${describeDirection(direction)}.${this.fullscreenNote}`;
@@ -286,6 +334,18 @@ function brightness(video: HTMLVideoElement): Lighting {
   if (level < 55) return "too_dark";
   if (level > 235) return "too_bright";
   return "good";
+}
+
+type EscapeLock = { lock: (keys?: string[]) => Promise<void>; unlock: () => void };
+
+function escapeLock(): EscapeLock | null {
+  const keyboard = (navigator as Navigator & { keyboard?: EscapeLock }).keyboard;
+  if (!keyboard || typeof keyboard.lock !== "function" || typeof keyboard.unlock !== "function") return null;
+  return keyboard;
+}
+
+function unlockEscape(): void {
+  escapeLock()?.unlock();
 }
 
 let sharedCanvas: HTMLCanvasElement | null = null;

@@ -6,6 +6,8 @@ import { PageError, PageLoading } from "@/components/page-state";
 import { DsaResultDialog } from "@/components/session/dsa-result-dialog";
 import { Badge } from "@/components/ui/badge";
 import { CodingWorkspace } from "@/components/workspace/coding-workspace";
+import { useSessionProctor } from "@/components/session/session-frame";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cx, formatClock } from "@/lib/format";
 import { useCountdown } from "@/lib/use-countdown";
@@ -14,9 +16,13 @@ import type { DsaEvaluation } from "@/lib/types";
 
 export default function DsaRoundPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const proctor = useSessionProctor();
   const { data, error, reload } = useLoad(
-    () => Promise.all([api.startDsa(sessionId), api.languages()]).then(([dsa, languages]) => ({ dsa, languages, deadline: Date.now() + dsa.ends_in_seconds * 1000 })),
-    sessionId,
+    () =>
+      proctor.running
+        ? Promise.all([api.startDsa(sessionId), api.languages()]).then(([dsa, languages]) => ({ dsa, languages, deadline: Date.now() + dsa.ends_in_seconds * 1000 }))
+        : Promise.resolve(null),
+    proctor.running ? sessionId : "need-devices",
   );
   const [evaluation, setEvaluation] = useState<DsaEvaluation | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,6 +40,21 @@ export default function DsaRoundPage() {
     },
     [sessionId],
   );
+
+  if (!proctor.running) {
+    return (
+      <main className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center px-6 py-16">
+        <h1 className="font-display text-3xl font-semibold text-ink">Enable the camera and microphone</h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+          Do this before the coding round starts. The timer begins after both are on, so the permission prompts do not count as leaving full-screen.
+        </p>
+        <Button className="mt-6 w-fit" onClick={() => void proctor.start()} loading={proctor.starting}>
+          Enable camera and mic
+        </Button>
+        {proctor.status !== "Camera monitoring is not active yet." ? <p className="mt-3 text-[13px] text-ink-2">{proctor.status}</p> : null}
+      </main>
+    );
+  }
 
   if (error && !data) {
     return (

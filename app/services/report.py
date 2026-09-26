@@ -10,10 +10,15 @@ def _cache_key(session) -> str:
     return f"{len(session.answers)}|{dsa_done}|{sorted(session.round_scores.items())}"
 
 
+def _scored(answers: list[dict]) -> list[int]:
+    """Answers the candidate actually gave. A skipped follow-up has no score."""
+    return [a["feedback"]["score"] for a in answers if isinstance(a.get("feedback", {}).get("score"), (int, float))]
+
+
 def _overall_score(session) -> int:
     if session.round_scores:
         return round(sum(session.round_scores.values()) / len(session.round_scores))
-    scores = [a["feedback"]["score"] for a in session.answers]
+    scores = _scored(session.answers)
     return round(sum(scores) / len(scores)) if scores else 0
 
 
@@ -37,10 +42,14 @@ def build_report(session) -> dict:
     by_section: dict[str, list[dict]] = {}
     for answer in session.answers:
         by_section.setdefault(answer.get("section", "general"), []).append(answer)
-    section_summaries = {
-        section: {"answer_count": len(items), "average_score": round(sum(i["feedback"]["score"] for i in items) / len(items)), "answers": items}
-        for section, items in by_section.items()
-    }
+    section_summaries = {}
+    for section, items in by_section.items():
+        scores = _scored(items)
+        section_summaries[section] = {
+            "answer_count": len(items),
+            "average_score": round(sum(scores) / len(scores)) if scores else 0,
+            "answers": items,
+        }
     return {
         "overall_score": _overall_score(session),
         **_written_feedback(session),

@@ -10,9 +10,11 @@ from app.services.agent import AgentUnavailable, InterviewAgent
 class FakeClient:
     """Stands in for InferenceClient: replies with its name, or raises the queued errors first."""
 
-    def __init__(self, name: str, errors: list[str] | None = None) -> None:
+    def __init__(self, name: str, errors: list[str] | None = None, content: str | None = None, reasoning: str | None = None) -> None:
         self.name = name
         self.errors = list(errors or [])
+        self.content = content
+        self.reasoning = reasoning
         self.calls = 0
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
@@ -20,7 +22,8 @@ class FakeClient:
         self.calls += 1
         if self.errors:
             raise RuntimeError(self.errors.pop(0))
-        message = SimpleNamespace(content=f"answer from {self.name}")
+        text = f"answer from {self.name}" if self.content is None else self.content
+        message = SimpleNamespace(content=text, reasoning=self.reasoning)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
@@ -71,6 +74,14 @@ def test_waits_out_a_short_rate_limit_when_everyone_is_limited(monkeypatch):
     monkeypatch.setattr(agent_module.time, "monotonic", lambda: 1000.0 + len(sleeps) * 10)
     assert _ask(agent) == "answer from gemini"
     assert sleeps == [2.5]
+
+
+def test_require_json_skips_prose_and_reads_reasoning(monkeypatch):
+    prose = FakeClient("gemini", content="Here is the problem, described in sentences.")
+    reasoned = FakeClient("groq", content="", reasoning='{"title": "Pair"}')
+    agent = _agent(monkeypatch, prose, reasoned)
+    assert agent._chat("system", "user", 10, 0.0, require_json=True) == '{"title": "Pair"}'
+    assert prose.calls == 1 and reasoned.calls == 1 and agent.model == "groq-model"
 
 
 def test_every_provider_failing_is_unavailable(monkeypatch):

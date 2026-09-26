@@ -64,12 +64,18 @@ def _topic_lines(state: dict) -> str:
     return "\n".join(lines)
 
 
+def _candidate_line(turn: dict) -> str:
+    if turn.get("skipped"):
+        return "[skipped this follow-up]"
+    return str(turn.get("answer") or "")[:1500]
+
+
 def _transcript(state: dict, limit: int = 14) -> str:
     turns = [t for t in state["turns"] if t.get("answer") is not None][-limit:]
     if not turns:
         return "(nothing yet)"
     return "\n\n".join(
-        f"Interviewer ({state['topics'][t['topic']]['skill']}): {t['question']}\nCandidate: {t['answer'][:1500]}" for t in turns
+        f"Interviewer ({state['topics'][t['topic']]['skill']}): {t['question']}\nCandidate: {_candidate_line(t)}" for t in turns
     )
 
 
@@ -114,7 +120,7 @@ def plan_round(profile: dict, section: str, topic_count: int, earlier_mentions: 
     )
 
 
-def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tuple[str, ...], turns_left: int) -> dict:
+def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tuple[str, ...], turns_left: int, skipped: bool = False) -> dict:
     """Rate the latest answer and decide what the interviewer says next."""
     topic = state["topics"][state["current"]]
     question = state["turns"][-1]["question"]
@@ -151,14 +157,29 @@ def next_turn(profile: dict, section: str, state: dict, answer: str, allowed: tu
         f"Follow-ups already asked on the current topic: {state['follow_ups']}. "
         f"Allowed decisions right now: {', '.join(allowed)}."
     )
+    if skipped:
+        latest = (
+            "The candidate answered: [skipped this follow-up]. "
+            "They chose not to answer this follow-up. That is a skip, not a wrong answer and not an empty attempt.\n\n"
+            "How to handle a skip:\n"
+            "- Do not treat the skip as evidence they failed the topic, and do not ask the same thing again.\n"
+            "- topic_verdict must reflect the answers they already gave on this topic, including any earlier follow-ups. "
+            "A solid answer stays solid if they skip a later follow-up. Do not mark the topic not_shown only because they skipped.\n"
+            "- Move on with one of the allowed decisions. One short line that leaving this question is fine, then the next question, or a close with no question.\n"
+        )
+        rating = "The skip is not scored. Set assessment.score to 0 and signal to no_answer; the app replaces that assessment.\n"
+    else:
+        latest = f"The candidate answered (may be a speech transcript; ignore transcription slips): {answer}\n\n{_DECISION_GUIDE}\n\n"
+        rating = (
+            "Rate only the latest answer from 0 to 100 against what you asked and what the job needs: 90+ exceptional and specific, "
+            "70-89 solid, 50-69 partly right or vague, 30-49 weak, below 30 missing, wrong or off-topic.\n"
+        )
     prompt = (
         agent._profile_context(profile)
         + f"\n\nYou are running {_ROUND_GOAL[section]}\n\nPlan:\n{_topic_lines(state)}\n\n"
         f"Conversation so far:\n{_transcript(state)}\n\n"
-        f"Current topic: {topic['skill']}\nYou just asked: {question}\nThe candidate answered (may be a speech transcript; ignore transcription slips): {answer}\n\n"
-        f"{budget}\n\n{_DECISION_GUIDE}\n\n"
-        "Rate only the latest answer from 0 to 100 against what you asked and what the job needs: 90+ exceptional and specific, "
-        "70-89 solid, 50-69 partly right or vague, 30-49 weak, below 30 missing, wrong or off-topic.\n"
+        f"Current topic: {topic['skill']}\nYou just asked: {question}\n{latest}"
+        f"{budget}\n\n{rating}"
         'Return JSON: {"assessment": {"score": number, "signal": one of "strong", "solid", "partial", "weak", "no_answer", '
         '"strength": one sentence on what worked, quoting them where you can, "improvement": one concrete sentence on what was missing, '
         '"role_relevance": one sentence on how it maps to the job}, '
@@ -205,6 +226,9 @@ def rate_round(profile: dict, section: str, state: dict) -> dict:
         f"Full conversation:\n{_transcript(state, limit=40)}\n\n"
         "Rate each topic you actually discussed from 0 to 100 on how well the candidate showed that skill. "
         "Rate what they demonstrated, not what they claimed; follow-up answers count more than first impressions. "
+        "If a turn says the candidate skipped a follow-up, that skip is not a wrong answer and is not a zero. "
+        "Rate the skill from the answers they actually gave, including follow-ups they answered before the skip. "
+        "Do not raise a skill for a point you never heard, and do not lower it only because a later follow-up was skipped. "
         'Return JSON: {"skills": [{"skill": short name, "level": one of "strong", "solid", "developing", "not_shown", '
         '"rating": number, "evidence": one sentence citing what they said}], '
         '"summary": two sentences on what this round showed about the candidate for this job}.',

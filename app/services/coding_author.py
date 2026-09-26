@@ -15,6 +15,8 @@ from app.services.code_runner.local import LocalExecutor
 
 _local = LocalExecutor()
 _FORBIDDEN = ("subprocess", "socket", "os.system", "shutil", "eval(", "exec(", "__import__", "open(")
+_JSON_WORD = re.compile(r"\bjson\b", re.IGNORECASE)
+_JSON_OBJECT = re.compile(r"""["'][A-Za-z_][A-Za-z0-9_]*["']\s*:""")
 
 
 def _unwrap(text: object) -> str:
@@ -30,6 +32,31 @@ def _strings(value: object, limit: int) -> list[str]:
 
 def _stdin(text: str) -> str:
     return text if text.endswith("\n") else text + "\n"
+
+
+def _real_newlines(text: str) -> str:
+    """Models often write a case as one JSON string with the two characters \\n instead of a line break."""
+    value = text.strip("\n")
+    if "\n" not in value and "\\n" in value:
+        value = value.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    return value
+
+
+def _json_shaped(text: str) -> bool:
+    return bool(_JSON_WORD.search(text) or _JSON_OBJECT.search(text))
+
+
+def _require_leetcode_style(data: dict, cases: list[dict], reference: str) -> None:
+    """The coding round is a DSA question. Stdin and stdout stay plain text."""
+    statement = "\n".join(
+        str(data.get(key) or "")
+        for key in ("title", "description", "input_format", "output_format")
+    )
+    if _json_shaped(statement) or _json_shaped(reference):
+        raise ValueError("write a LeetCode-style DSA problem with plain stdin and stdout, not JSON")
+    for case in cases:
+        if _json_shaped(case["input"]):
+            raise ValueError("case input must be plain numbers or strings, not JSON objects")
 
 
 def materialize_coding_problem(data: dict, difficulty: str) -> Problem:
@@ -55,7 +82,7 @@ def materialize_coding_problem(data: dict, difficulty: str) -> Problem:
     for item in raw_cases[:8]:
         if not isinstance(item, dict):
             continue
-        stdin = str(item.get("input", "")).strip("\n")
+        stdin = _real_newlines(str(item.get("input", "")))
         if not stdin or len(stdin) > 8000 or stdin in seen:
             continue
         seen.add(stdin)
@@ -65,6 +92,7 @@ def materialize_coding_problem(data: dict, difficulty: str) -> Problem:
     hidden = [case for case in cases if case["hidden"]]
     if len(visible) < 2 or len(hidden) < 2:
         raise ValueError("need at least two visible and two hidden cases")
+    _require_leetcode_style(data, cases, reference)
 
     language = LANGUAGES["python"]
     batch = _local.run_batch(language, reference, [_stdin(case["input"]) for case in cases], 2.0)

@@ -32,7 +32,6 @@ The interviewer gets one link (`/i/<token>`). A student must sign in, then start
 - Starter code parses stdin so the candidate works on the solution.
 - Drafts persist per problem and language. The timer lives on the server, so a refresh does not reset it. When time runs out, the current code is submitted.
 - Correctness comes from executing the code (Judge0 by default). The agent writes the complexity and quality notes. If the agent is unavailable at submit time, the tests still count and the complexity note is labelled as an estimate.
-- The same editor is available untimed at `/practice`.
 
 ### Spoken rounds
 
@@ -121,7 +120,6 @@ If the API is not on port 8000, set `API_URL` in `frontend/.env.local`. Spoken a
 | `/session/[id]` | Interview map. `?section=project` or `?section=fundamentals` opens the conversation |
 | `/session/[id]/dsa` | Timed coding round |
 | `/report/[id]` | Written report |
-| `/practice`, `/practice/[slug]` | Untimed problems |
 | `/admin`, `/admin/new` | Interviewer list and new job |
 | `/admin/interviews/[id]` | Scoreboard and the public coding problem |
 | `/i/[token]` | Shared interview link |

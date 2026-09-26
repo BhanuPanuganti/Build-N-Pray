@@ -2,11 +2,12 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { JobDescription } from "@/components/interview/job-description";
 import { DocumentInput } from "@/components/setup/document-input";
 import { SiteHeader } from "@/components/site-header";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Button, LinkButton } from "@/components/ui/button";
-import { Field, Textarea } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { DifficultyBadge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { useUser } from "@/lib/auth";
@@ -19,13 +20,12 @@ export default function InterviewLinkPage() {
   const { data, error, reload } = useLoad(() => api.publicInterview(token), token);
   const [ready, setReady] = useState(false);
   const [resume, setResume] = useState("");
-  const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => setReady(true), []);
 
-  const canStart = resume.trim().length >= 10 && goal.trim().length >= 5;
+  const canStart = resume.trim().length >= 10;
   const next = `/i/${token}`;
 
   async function start(event: React.FormEvent) {
@@ -34,7 +34,7 @@ export default function InterviewLinkPage() {
     setBusy(true);
     setSubmitError(null);
     try {
-      const { session_id } = await api.joinInterview(token, resume.trim(), goal.trim());
+      const { session_id } = await api.joinInterview(token, resume.trim());
       router.push(`/session/${session_id}`);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : "Could not start the interview.");
@@ -56,7 +56,7 @@ export default function InterviewLinkPage() {
               <DifficultyBadge difficulty={data.difficulty} />
             </div>
             <p className="mt-6 text-[15px] leading-relaxed text-ink-2">{data.summary}</p>
-            <div className="mt-8 whitespace-pre-wrap rounded-2xl border border-line bg-surface p-6 text-[15px] leading-relaxed text-ink-2">{data.job_description}</div>
+            <JobDescription text={data.job_description} />
             <ul className="mt-6 space-y-1 text-sm text-ink-2">
               {data.dsa_enabled && <li>Coding round, {data.dsa_duration_minutes} minutes, written for this job</li>}
               <li>{data.project_question_count} project questions from your résumé</li>
@@ -75,9 +75,6 @@ export default function InterviewLinkPage() {
                 <p className="text-sm text-ink-2">Continuing as {user.name}.</p>
                 <Field label="Résumé">
                   {(id) => <DocumentInput id={id} value={resume} onChange={setResume} minLength={10} placeholder="Projects, what you built, the technologies you used…" />}
-                </Field>
-                <Field label="What do you want to get better at?">
-                  {(id) => <Textarea id={id} value={goal} onChange={(e) => setGoal(e.target.value)} className="min-h-20" />}
                 </Field>
                 {submitError && <p className="text-[13px] text-danger">{submitError}</p>}
                 <Button type="submit" size="lg" disabled={!canStart} loading={busy}>

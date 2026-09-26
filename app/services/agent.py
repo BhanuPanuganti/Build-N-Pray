@@ -57,8 +57,38 @@ def _rate_limit_wait(error: str) -> float | None:
     return min(seconds + 0.5, MAX_RATE_LIMIT_WAIT_SECONDS) if seconds <= MAX_RATE_LIMIT_WAIT_SECONDS else None
 
 
+_JSON_OBJECT = re.compile(r"\{[\s\S]*\}")
+
+
+def _as_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for part in value:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or ""))
+            else:
+                parts.append(str(getattr(part, "text", "") or ""))
+        return "".join(parts)
+    return "" if value is None else str(value)
+
+
+def _message_text(message: object) -> str:
+    """Visible reply, or the reasoning channel when that is where the JSON landed."""
+    content = _as_text(getattr(message, "content", None))
+    if _JSON_OBJECT.search(content):
+        return content
+    reasoning = _as_text(getattr(message, "reasoning", None))
+    if _JSON_OBJECT.search(reasoning):
+        return reasoning
+    return content
+
+
 def _parse_json(text: str) -> dict:
-    match = re.search(r"\{[\s\S]*\}", text)
+    match = _JSON_OBJECT.search(text)
     if not match:
         raise ValueError("no JSON object in the reply")
     return json.loads(match.group(0))
@@ -142,7 +172,7 @@ class InterviewAgent:
         except AgentUnavailable:
             return "not configured"
 
-    def _chat(self, system: str, user: str, max_tokens: int, temperature: float) -> str:
+    def _chat(self, system: str, user: str, max_tokens: int, temperature: float, *, require_json: bool = False) -> str:
         """Try providers in priority order. A provider that fails sits out for a while so later calls skip it."""
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
         errors: list[str] = []
@@ -152,8 +182,10 @@ class InterviewAgent:
             now = time.monotonic()
             ready = [p for p in providers if self._benched_until.get(p[0], 0.0) <= now] or providers
             for name, model, client in ready:
+                # gpt-oss spends max_tokens on hidden reasoning and then returns an empty reply.
+                request = {"max_completion_tokens": max_tokens, "reasoning_effort": "low"} if name == "groq" else {"max_tokens": max_tokens}
                 try:
-                    response = client.chat.completions.create(model=model, messages=messages, max_tokens=max_tokens, temperature=temperature)
+                    response = client.chat.completions.create(model=model, messages=messages, temperature=temperature, **request)
                 except Exception as exc:
                     errors.append(f"{name} ({model}): {exc}")
                     wait = _rate_limit_wait(str(exc))
@@ -161,9 +193,13 @@ class InterviewAgent:
                         waits.append(wait)
                     self._benched_until[name] = time.monotonic() + (wait if wait is not None else PROVIDER_BENCH_SECONDS)
                     continue
+                text = _message_text(response.choices[0].message)
+                if require_json and not _JSON_OBJECT.search(text):
+                    errors.append(f"{name} ({model}): no JSON object in the reply")
+                    continue
                 self._benched_until.pop(name, None)
                 self.last_model = model
-                return response.choices[0].message.content or ""
+                return text
             if not waits or attempt == RATE_LIMIT_RETRIES:
                 break
             time.sleep(min(waits))
@@ -268,35 +304,48 @@ class InterviewAgent:
         instructions = (
             self._profile_context(profile)
             + "\n\nWrite one original coding problem for this interview's coding round. "
-            f"Difficulty must be {difficulty}. Base the topic on skills the job description actually uses. "
-            "Do not reuse a famous problem or its title. The program reads stdin and prints the answer.\n"
+            f"Difficulty must be {difficulty}. "
+            "It must be a normal data-structures and algorithms question in the style of LeetCode: "
+            "arrays, strings, hash maps, two pointers, sliding window, stacks, binary search, trees, graphs, heaps, intervals, or dynamic programming. "
+            "Do not reuse a famous problem or its title. "
+            "Do not write a business workflow, document, contract, API, or anything whose data is JSON, objects, or key-value records. "
+            "Stdin is plain text only: integers, space-separated numbers, or a single string. No braces and no quoted keys. "
+            "Stdout is one integer, true or false, or space-separated integers. Not a JSON array and not an object.\n"
+            "A good case looks like input \"4\\n2 7 11 15\\n9\" and the program prints \"0 1\".\n"
             "Return JSON with keys: "
-            '"title" (short), "tags" (1 to 4 short strings), "description" (the full problem, at least two sentences), '
+            '"title" (short), "tags" (1 to 4 algorithm topics, never the word json), "description" (the full problem, at least two sentences, naming the inputs the way LeetCode does), '
             '"input_format", "output_format", "constraints" (array of short strings), "hints" (1 or 2 short strings that do not reveal the code), '
             '"expected_time" (big-O), "expected_space" (big-O), '
-            '"reference_python" (a complete Python 3 program that reads stdin and prints the correct answer), '
+            '"reference_python" (a complete Python 3 program that reads stdin and prints the correct answer, with no json module), '
             '"starter_python" (the same input/output harness with the solution replaced by a stub that returns a wrong placeholder), '
             '"cases" (6 to 8 objects with "input", "hidden" (boolean), and optional "explanation"). '
             "At least two cases are visible (hidden=false) and at least two are hidden. "
             "Do not include expected outputs; the reference program is the source of truth. "
-            "Inputs must be small enough to finish in under a second."
+            "Each case input is a string whose line breaks are real newlines. "
+            "The reference program must succeed on every case. Inputs must be small enough to finish in under a second."
         )
         prompt = instructions
         last_error = "unusable reply"
         for attempt in range(3):
-            text = self._chat(
-                "You are a senior engineer writing a fair coding-interview problem. Reply with a single JSON object and nothing else.",
-                prompt,
-                max_tokens=2500,
-                temperature=0.4,
-            )
             try:
+                text = self._chat(
+                    "You are a senior engineer writing a fair coding-interview problem. Reply with a single JSON object and nothing else.",
+                    prompt,
+                    max_tokens=4096,
+                    temperature=0.4,
+                    require_json=True,
+                )
                 return materialize_coding_problem(_parse_json(text), difficulty)
+            except AgentUnavailable as exc:
+                last_error = str(exc)
+                if "no JSON object" not in last_error:
+                    raise
             except (ValueError, KeyError, TypeError, AttributeError) as exc:
                 last_error = str(exc)
-                if attempt:
-                    break
-                prompt = instructions + f"\n\nThe previous problem was rejected: {last_error}. Return a corrected JSON object only."
+            if attempt == 2:
+                break
+            reason = " ".join(last_error.split())[:180]
+            prompt = instructions + f"\n\nThe previous problem was rejected: {reason}. Return a corrected JSON object only."
         raise AgentUnavailable(f"The interview agent could not prepare a coding problem ({last_error}). Try again.")
 
     def round_questions(self, profile: dict, round_name: str, count: int = 3) -> list[str]:
@@ -354,10 +403,18 @@ class InterviewAgent:
         )
 
     def final_report(self, profile: dict, answers: list[dict], round_scores: dict, dsa: dict | None) -> dict:
-        transcript = "\n\n".join(
-            f"[{a.get('section', 'general')}] Q: {a['question']}\nA: {a['answer'][:1500]}\nScore {a['feedback']['score']}: {a['feedback']['improvement']}"
-            for a in answers
-        ) or "No spoken answers."
+        def line(answer: dict) -> str:
+            section = answer.get("section", "general")
+            question = answer["question"]
+            if answer.get("skipped"):
+                return (
+                    f"[{section}] Q: {question}\nA: [skipped this follow-up]\n"
+                    "Not scored. Rate the answers they gave on this topic, including earlier follow-ups."
+                )
+            feedback = answer["feedback"]
+            return f"[{section}] Q: {question}\nA: {answer['answer'][:1500]}\nScore {feedback['score']}: {feedback['improvement']}"
+
+        transcript = "\n\n".join(line(answer) for answer in answers) or "No spoken answers."
         coding = "No coding round."
         if dsa and dsa.get("evaluation"):
             ev = dsa["evaluation"]
