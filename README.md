@@ -120,7 +120,7 @@ flowchart LR
 | Code execution | Judge0                                                          |
 | Monitoring     | MediaPipe Face Landmarker, TensorFlow.js COCO-SSD               |
 | Database       | MongoDB Atlas                                                   |
-| Hosting        | Vercel and Render                                               |
+| Hosting        | Render                                                          |
 
 ## Getting started
 
