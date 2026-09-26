@@ -33,9 +33,12 @@ function InterviewList() {
               <p className="mt-1 line-clamp-2 text-sm text-ink-2">{interview.summary || interview.interview_focus}</p>
             </div>
             <DifficultyBadge difficulty={interview.difficulty} />
-            <p className="text-sm text-ink-2">
-              {interview.attempt_count} {interview.attempt_count === 1 ? "attempt" : "attempts"}
-            </p>
+            <div className="text-right text-sm text-ink-2">
+              <p>{interview.attempt_count} {interview.attempt_count === 1 ? "attempt" : "attempts"}</p>
+              <p className="text-[12px] text-ink-3">
+                {new Date(interview.created_at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+              </p>
+            </div>
           </Link>
         </li>
       ))}

@@ -47,6 +47,9 @@ function Board({ id }: { id: string }) {
             <DifficultyBadge difficulty={interview.data.difficulty} />
             <span className="text-sm text-ink-2">{interview.data.attempt_count} started</span>
             {average !== null && <span className="text-sm text-ink-2">Average {average}</span>}
+            <span className="text-[12px] text-ink-3">
+              Created {new Date(interview.data.created_at).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
