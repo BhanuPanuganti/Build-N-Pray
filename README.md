@@ -4,6 +4,9 @@
 
 Publish a job, share one link, and read a written report on every candidate.
 
+**Live demo → [build-n-pray.vercel.app](https://build-n-pray.vercel.app)**  
+API → [build-n-pray.onrender.com](https://build-n-pray.onrender.com)
+
 ## Overview
 
 The recruiter publishes a job description and what to focus on. Each candidate who opens the link gets an interview built from that job and their own résumé:
@@ -120,7 +123,7 @@ flowchart LR
 | Code execution | Judge0                                                          |
 | Monitoring     | MediaPipe Face Landmarker, TensorFlow.js COCO-SSD               |
 | Database       | MongoDB Atlas                                                   |
-| Hosting        | Render                                                          |
+| Hosting        | Render (API) · Vercel (frontend)                                |
 
 ## Getting started
 
